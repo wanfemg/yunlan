@@ -1,0 +1,159 @@
+name: yunlan
+
+services:
+  initialize-data:
+    image: alpine:3.22
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    restart: "no"
+    entrypoint: ["/bin/sh", "-ec"]
+    command: ["chown -R 10001:10001 /state/main /state/finance /state/probe /state/ip-intelligence"]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE]
+    volumes:
+      - site-admin-data:/state/main
+      - finance-data:/state/finance
+      - probe-data:/state/probe
+      - ./data/ip-intelligence:/state/ip-intelligence
+  site-admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${YUNLAN_IMAGE:-yunlan:local}
+    depends_on:
+      initialize-data:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 15s
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-18080}:18080"
+      - "${PROBE_BIND_ADDRESS:-127.0.0.1}:${PROBE_HOST_PORT:-18081}:18081"
+    environment:
+      APP_MODE: ${APP_MODE:-demo}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      SITEADMIN_COOKIE_SECURE: ${SITEADMIN_COOKIE_SECURE:-auto}
+      MAIN_DB_DRIVER: ${MAIN_DB_DRIVER:-postgres}
+      MAIN_DB_DSN: ${MAIN_DB_DSN:-}
+      LOG_DB_DRIVER: ${LOG_DB_DRIVER:-}
+      LOG_DB_DSN: ${LOG_DB_DSN:-}
+      MANAGEMENT_DB_DRIVER: ${MANAGEMENT_DB_DRIVER:-}
+      MANAGEMENT_DB_DSN: ${MANAGEMENT_DB_DSN:-}
+      NEWAPI_UPSTREAM: ${NEWAPI_UPSTREAM:-}
+      NEWAPI_ADMIN_TOKEN: ${NEWAPI_ADMIN_TOKEN:-}
+      NEWAPI_ADMIN_USER_ID: ${NEWAPI_ADMIN_USER_ID:-}
+      PROBE_SHARED_SECRET: ${PROBE_SHARED_SECRET:-}
+      FINANCE_UPSTREAM: http://127.0.0.1:8765
+      FINANCE_PROXY_SECRET: ${FINANCE_PROXY_SECRET:?Run install.sh to create the shared finance key}
+      GEOIP_CITY_PATH: ${GEOIP_CITY_PATH:-}
+      GEOIP_ASN_PATH: ${GEOIP_ASN_PATH:-}
+      GEOIP_ISP_PATH: ${GEOIP_ISP_PATH:-}
+      GEOIP_ANONYMOUS_PATH: ${GEOIP_ANONYMOUS_PATH:-}
+      IP_INTELLIGENCE_DIR: ${IP_INTELLIGENCE_DIR:-/app/ip-intelligence}
+      NETWORK_HISTORY_COMPLETE: ${NETWORK_HISTORY_COMPLETE:-false}
+      DATA_DIR: /app/data
+      TIMEZONE: ${TIMEZONE:-Asia/Shanghai}
+      QUOTA_PER_UNIT: ${QUOTA_PER_UNIT:-500000}
+      PORT: "18080"
+      STATIC_DIR: /app/frontend/dist
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:18080/api/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    volumes:
+      - site-admin-data:/app/data
+      - ./data/ip-intelligence:/app/ip-intelligence
+  finance:
+    build:
+      context: .
+      dockerfile: finance/Dockerfile
+    image: ${YUNLAN_FINANCE_IMAGE:-yunlan-finance:local}
+    restart: unless-stopped
+    init: true
+    network_mode: service:site-admin
+    depends_on:
+      site-admin:
+        condition: service_healthy
+        restart: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    stop_grace_period: 15s
+    environment:
+      APP_MODE: ${APP_MODE:-demo}
+      DATA_DIR: /app/data
+      SITEADMIN_CONFIG_FILE: /siteadmin-data/connections.json
+      SITEADMIN_INTERNAL_URL: http://127.0.0.1:18080
+      UI_BIND: 127.0.0.1
+      UI_PORT: "8765"
+      UI_BASE_PATH: /finance
+      FINANCE_PROXY_SECRET: ${FINANCE_PROXY_SECRET:?Run install.sh to create the shared finance key}
+      TZ: ${TIMEZONE:-Asia/Shanghai}
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - finance-data:/app/data
+      - site-admin-data:/siteadmin-data:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/finance/healthz', timeout=3).close()"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+  login-probe:
+    profiles: [probe]
+    build:
+      context: .
+      dockerfile: login-probe/Dockerfile
+    image: ${YUNLAN_PROBE_IMAGE:-yunlan-probe:local}
+    restart: unless-stopped
+    init: true
+    network_mode: service:site-admin
+    depends_on:
+      site-admin:
+        condition: service_healthy
+        restart: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    stop_grace_period: 15s
+    environment:
+      NEWAPI_UPSTREAM: ${NEWAPI_UPSTREAM:-}
+      SITEADMIN_ORIGIN: http://127.0.0.1:18080
+      SITEADMIN_CONFIG_FILE: /siteadmin-data/connections.json
+      PROBE_LISTEN: 0.0.0.0:18081
+      PROBE_DATA_DIR: /app/data
+      PROBE_SHARED_SECRET: ${PROBE_SHARED_SECRET:-}
+      PROBE_TRUSTED_PROXIES: ${PROBE_TRUSTED_PROXIES:-}
+      TZ: ${TIMEZONE:-Asia/Shanghai}
+    volumes:
+      - probe-data:/app/data
+      - site-admin-data:/siteadmin-data:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:18081/_siteadmin_probe/healthz"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  site-admin-data:
+  finance-data:
+  probe-data:

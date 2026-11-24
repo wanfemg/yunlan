@@ -1,0 +1,14 @@
+.ag-reference,
+.ag-reference > * {
+  min-width: 0;
+}
+
+.ag-reference-tabs {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.ag-reference-tabs > button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}

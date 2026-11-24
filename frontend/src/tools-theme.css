@@ -1,0 +1,293 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-size: 100%;
+  }
+
+  :root {
+    --background: 212 34% 98%;
+    --foreground: 222 42% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221 82% 48%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 32% 95.2%;
+    --muted-foreground: 215 17% 43%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 213 28% 89.5%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 220 35% 7%;
+    --foreground: 210 36% 97%;
+    --card: 220 32% 10%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 47% 11%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 26% 15%;
+    --muted-foreground: 215 17% 64%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 24% 17%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground transition-colors duration-300;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-width: 320px;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-background/60 backdrop-blur-xl border border-border/50 supports-[backdrop-filter]:bg-background/40;
+  }
+  .glass-card {
+    @apply bg-card/75 backdrop-blur-xl border border-border/60 supports-[backdrop-filter]:bg-card/55;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/20 rounded-full transition-colors duration-200;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/40;
+  }
+  .tracking-tight, .tracking-tighter, .tracking-wide, .tracking-wider, .tracking-widest {
+    letter-spacing: 0;
+  }
+}
+
+/* A shared workspace width keeps the header, navigation and every module
+   aligned. Wide screens should use their available space, without shrinking
+   the navigation labels to squeeze them into a narrow centered column. */
+.tools-container {
+  width: 100%;
+  max-width: 1920px;
+  margin-inline: auto;
+  padding-inline: clamp(1rem, 2.4vw, 3rem);
+}
+.tools-main { padding-block: clamp(1.5rem, 2.2vw, 2.5rem); }
+.tools-shell {
+  background:
+    radial-gradient(circle at 10% -10%, hsl(var(--primary) / .055), transparent 34%),
+    radial-gradient(circle at 88% 8%, hsl(168 72% 42% / .055), transparent 30%),
+    radial-gradient(circle at 50% 110%, hsl(262 72% 60% / .035), transparent 42%),
+    hsl(var(--background));
+}
+.tools-shell > .sticky {
+  background: linear-gradient(180deg, hsl(var(--card) / .94), hsl(var(--background) / .9)) !important;
+  box-shadow: 0 1px 0 hsl(var(--border) / .38), 0 14px 38px hsl(215 25% 45% / .055) !important;
+}
+.tools-navigation { height: 3.25rem; gap: .25rem; }
+.tools-navigation-tab {
+  flex: 1 0 auto;
+  min-height: 2.25rem;
+  gap: .5rem;
+  padding-inline: .875rem;
+  font-size: .875rem;
+  border-radius: .75rem;
+  transition: color .18s, transform .18s, background .18s;
+}
+.tools-navigation-tab:hover { color: hsl(var(--foreground) / .88); }
+.tools-navigation-tab:active { transform: translateY(.5px); }
+.tools-navigation-tab:focus-visible { box-shadow: 0 0 0 2px hsl(var(--ring) / .28); }
+.tools-navigation-tab svg { opacity: .82; }
+.tools-navigation-tab[aria-current="page"] svg { opacity: 1; }
+
+.tools-shell main h1 {
+  letter-spacing: -.025em;
+}
+.tools-shell main h2,
+.tools-shell main h3 {
+  letter-spacing: -.012em;
+}
+.tools-shell main .text-muted-foreground {
+  color: hsl(var(--muted-foreground) / .92);
+}
+.tools-shell main .rounded-lg.border.bg-card > .p-6,
+.tools-shell main > .rounded-lg.border.bg-card > .p-6 {
+  border-bottom: 1px solid hsl(var(--border) / .42);
+}
+.tools-shell main .rounded-lg.border.bg-card > .p-6 + *,
+.tools-shell main > .rounded-lg.border.bg-card > .p-6 + * {
+  padding-top: 1.25rem;
+}
+.tools-shell main tbody tr {
+  border-color: hsl(var(--border) / .38);
+}
+.tools-shell main tbody tr + tr {
+  border-top: 1px solid hsl(var(--border) / .34);
+}
+.tools-shell main tbody tr:hover {
+  background: linear-gradient(90deg, hsl(var(--primary) / .055), hsl(var(--primary) / .015));
+}
+.tools-shell main td,
+.tools-shell main th {
+  line-height: 1.55;
+}
+.tools-shell main td {
+  color: hsl(var(--foreground) / .88);
+}
+.tools-shell main [role="combobox"] {
+  border-radius: .625rem;
+  transition: border-color .16s, box-shadow .16s, background .16s;
+}
+.tools-shell main [role="combobox"]:focus,
+.tools-shell main input:not([type="checkbox"]):not([type="radio"]):focus,
+.tools-shell main textarea:focus {
+  border-color: hsl(var(--primary) / .42);
+  box-shadow: 0 0 0 3px hsl(var(--primary) / .1);
+}
+.tools-shell main [role="switch"]:focus-visible,
+.tools-shell main button:focus-visible {
+  outline: none;
+}
+.tools-shell main ::selection {
+  background: hsl(var(--primary) / .18);
+}
+.tools-shell main .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / .24);
+}
+.tools-shell main .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / .42);
+}
+
+.tools-shell main > * > .rounded-lg.border.bg-card,
+.tools-shell main > .rounded-lg.border.bg-card {
+  border-color: hsl(var(--border) / .68);
+  border-radius: 1.125rem;
+  background: linear-gradient(180deg, hsl(var(--card) / .95), hsl(var(--card) / .82));
+  box-shadow: 0 12px 32px hsl(215 25% 45% / .045);
+  transition: box-shadow .2s, border-color .2s, transform .2s;
+}
+.tools-shell main > .rounded-lg.border.bg-card:active,
+.tools-shell main > * > .rounded-lg.border.bg-card:active {
+  transform: none;
+}
+.tools-shell main > * > .rounded-lg.border.bg-card:hover,
+.tools-shell main > .rounded-lg.border.bg-card:hover {
+  border-color: hsl(var(--primary) / .16);
+  box-shadow: 0 18px 40px hsl(215 25% 45% / .07);
+  transform: none;
+}
+
+.tools-shell main .glass-card { border-radius: 1.125rem; }
+.tools-shell main table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.tools-shell main thead th {
+  background: linear-gradient(180deg, hsl(var(--muted) / .68), hsl(var(--muted) / .48));
+  color: hsl(var(--muted-foreground));
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+.tools-shell main tbody tr {
+  background: hsl(var(--card) / .45);
+}
+.tools-shell main tbody tr:hover {
+  background: hsl(var(--primary) / .045);
+}
+.tools-shell main [role="combobox"],
+.tools-shell main input:not([type="checkbox"]):not([type="radio"]),
+.tools-shell main textarea {
+  border-color: hsl(var(--border) / .8);
+  background: hsl(var(--card) / .75);
+  box-shadow: inset 0 1px 0 hsl(var(--background) / .45);
+}
+.tools-shell main [role="combobox"]:hover,
+.tools-shell main input:not([type="checkbox"]):not([type="radio"]):hover,
+.tools-shell main textarea:hover {
+  border-color: hsl(var(--primary) / .22);
+}
+.tools-shell main [role="dialog"] [role="listbox"],
+.tools-shell [role="listbox"] {
+  border-radius: .875rem;
+  box-shadow: 0 18px 44px hsl(215 25% 45% / .14);
+}
+
+@media (min-width: 1280px) {
+  html { font-size: 106.25%; }
+  .tools-shell .text-\[10px\] { font-size: .6875rem; }
+  .tools-shell .text-\[11px\] { font-size: .75rem; }
+  .tools-shell .text-\[12px\] { font-size: .8125rem; }
+}
+@media (min-width: 1600px) {
+  .tools-navigation-tab { padding-inline: 1rem; font-size: .9375rem; }
+}
+@media (min-width: 1920px) {
+  html { font-size: 112.5%; }
+}
+@media (max-width: 639px) {
+  .tools-container { padding-inline: 1rem; }
+  .tools-main { padding-block: 1.25rem; }
+}
+
+@media (max-width: 639px) {
+  .tools-shell main input:not([type="checkbox"]):not([type="radio"]),
+  .tools-shell main textarea,
+  [role="dialog"] input:not([type="checkbox"]):not([type="radio"]),
+  [role="dialog"] textarea { font-size: 16px; }
+  .tools-shell main [role="combobox"], [role="dialog"] [role="combobox"] { min-height: 40px; }
+}
+
+/* Codex Plus can misclassify quota details as one of its own usage alerts.
+   Keep this protection limited to this application's open business dialogs. */
+[data-siteadmin-dialog-content][data-state="open"][data-codex-plus-hidden-usage-alert="true"] {
+  display: grid !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+[data-siteadmin-dialog-content][data-state="open"][data-codex-plus-hidden-usage-alert="true"][data-dialog-layout="flex"] {
+  display: flex !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+}

@@ -1,0 +1,26 @@
+.scroll-region {
+  --scroll-region-height: 22rem;
+  min-width: 0;
+  max-width: 100%;
+  max-height: min(var(--scroll-region-height), 64dvh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / .3) transparent;
+  -webkit-overflow-scrolling: touch;
+  border-radius: .875rem;
+}
+.scroll-region--sm { --scroll-region-height: 15rem; }
+.scroll-region--md { --scroll-region-height: 22rem; }
+.scroll-region--lg { --scroll-region-height: 30rem; }
+.scroll-region--fixed { height: min(var(--scroll-region-height), 64dvh); }
+.scroll-region:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: -2px; border-radius: 8px; }
+.scroll-region::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll-region::-webkit-scrollbar-track { background: transparent; }
+.scroll-region::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: hsl(var(--primary) / .28); background-clip: padding-box; }
+.scroll-region::-webkit-scrollbar-thumb:hover { background-color: hsl(var(--primary) / .48); }
+@media (max-width: 639px) {
+  .scroll-region { max-height: min(var(--scroll-region-height), 56dvh); }
+  .scroll-region--fixed { height: min(var(--scroll-region-height), 56dvh); }
+}

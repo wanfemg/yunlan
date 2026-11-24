@@ -1,0 +1,62 @@
+.task-logs-page {
+  min-width: 0;
+}
+
+.task-logs-page h1,
+.task-logs-page h2,
+.task-logs-page h3,
+.task-logs-page p {
+  margin-bottom: 0;
+  letter-spacing: 0;
+}
+
+.task-logs-page .grid > div {
+  min-width: 0;
+}
+
+.task-logs-page .text-2xl {
+  overflow-wrap: anywhere;
+}
+
+.task-logs-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.task-expand-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+}
+
+.task-expand-button:hover {
+  background: hsl(var(--muted));
+}
+
+.task-expand-button:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+@media (max-width: 639px) {
+  .task-logs-pagination {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .task-logs-pagination > div {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

@@ -1,0 +1,56 @@
+.ip-analysis-page { min-width: 0; }
+.ip-analysis-page > *, .ip-analysis-page [role="tabpanel"] > * { min-width: 0; }
+.ip-chart { position: relative; width: 100%; min-width: 0; height: 100%; }
+.ip-map-chart { height: 450px; }
+.ip-map-state { display: flex; min-height: 450px; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+.ip-trend-chart { height: 280px; min-width: 0; }
+.ip-small-chart { height: 230px; min-width: 0; }
+.ip-chart-empty { display: flex; min-height: 160px; height: 100%; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: hsl(var(--muted-foreground)); font-size: .875rem; }
+.ip-reference-field { display: flex; min-width: 0; flex-direction: column; gap: 8px; color: hsl(var(--foreground)); font-size: .875rem; }
+.ip-reference-dl { display: grid; gap: 12px; margin: 0; font-size: .8125rem; }
+.ip-reference-dl > div { display: grid; grid-template-columns: minmax(105px, .6fr) minmax(0, 1fr); gap: 14px; }
+.ip-reference-dl dt { color: hsl(var(--muted-foreground)); }
+.ip-reference-dl dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: hsl(var(--foreground)); }
+.ip-reference-details summary { list-style: none; }
+.ip-reference-details summary::-webkit-details-marker { display: none; }
+.ip-reference-details summary > svg { transition: transform .2s; }
+.ip-reference-details[open] summary > svg { transform: rotate(180deg); }
+.ip-relations-section { display: grid; min-width: 0; gap: 1rem; padding-block: 1.25rem; border-block: 1px solid hsl(var(--border)); }
+.ip-relations-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; }
+.ip-relations-heading h3 { display: flex; align-items: center; gap: .5rem; margin: 0; font-size: 1rem; font-weight: 650; }
+.ip-relations-heading p { margin: .5rem 0 0; color: hsl(var(--muted-foreground)); font-size: .75rem; }
+.ip-relations-heading > div:last-child { width: 13rem; }
+.ip-relations-table { --scroll-region-height: 30rem; }
+.ip-relations-table th { white-space: nowrap; }
+.ip-relation-identity { width: 20rem; min-width: 16rem; }
+.ip-relation-users { display: flex; flex-wrap: wrap; align-items: center; gap: .125rem .5rem; margin-top: .25rem; max-width: 22rem; }
+.ip-relation-users .user-identity { padding: .25rem; }
+.ip-relation-users .user-identity__avatar { width: 1.375rem; height: 1.375rem; font-size: .625rem; }
+.ip-relation-users .user-identity__name { max-width: 7rem; font-size: .6875rem; }
+.ip-relation-users .user-identity__meta { display: none; }
+.ip-relations-pagination { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .75rem; color: hsl(var(--muted-foreground)); font-size: .75rem; }
+.ip-relations-pagination > div { display: flex; align-items: center; gap: .75rem; font-variant-numeric: tabular-nums; }
+.ip-active-filters { display: flex; flex-wrap: wrap; gap: .5rem; }
+.ip-active-filters > button { display: inline-flex; min-width: 0; align-items: center; gap: .375rem; padding: .375rem .625rem; border: 1px solid hsl(var(--border)); border-radius: 6px; background: hsl(var(--card)); color: hsl(var(--muted-foreground)); overflow-wrap: anywhere; text-align: left; font-size: .75rem; }
+.ip-active-filters > button:hover { background: hsl(var(--primary) / .06); color: hsl(var(--primary)); }
+.ip-lookup-intelligence { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; color: hsl(var(--muted-foreground)); font-size: .75rem; line-height: 1.7; }
+.ip-intelligence-sources { display: grid; gap: .875rem; padding-block: 1rem; border-block: 1px solid hsl(var(--border)); }
+.ip-intelligence-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
+.ip-intelligence-heading h4 { display: flex; align-items: center; gap: .5rem; margin: 0; font-size: .875rem; font-weight: 600; }
+.ip-intelligence-heading p { margin: .375rem 0 0; color: hsl(var(--muted-foreground)); font-size: .6875rem; }
+.ip-intelligence-scope { margin: 0; color: hsl(var(--muted-foreground)); font-size: .75rem; line-height: 1.75; }
+.ip-intelligence-warnings { color: hsl(var(--muted-foreground)); font-size: .6875rem; line-height: 1.75; }
+.ip-intelligence-warnings > summary { width: fit-content; cursor: pointer; }
+.ip-intelligence-warnings > ul { display: grid; gap: .375rem; margin: .625rem 0 0; padding-left: 1rem; list-style: disc; }
+.ip-intelligence-warnings > p { margin: .625rem 0 0; overflow-wrap: anywhere; }
+@media (max-width: 639px) {
+  .ip-analysis-page input:not([type="checkbox"]):not([type="radio"]) { min-height: 44px; font-size: 16px; }
+  .ip-analysis-page > div:first-child > div:last-child { width: 100%; }
+  .ip-analysis-page [role="tablist"] { max-width: 100%; }
+  .ip-reference-dl > div { grid-template-columns: 100px minmax(0, 1fr); gap: 10px; }
+  .ip-relations-heading > div:last-child { width: 100%; }
+  .ip-relations-table { --scroll-region-height: 27rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ip-analysis-page .animate-spin { animation: none; }
+}
