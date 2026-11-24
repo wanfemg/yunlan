@@ -17,6 +17,10 @@ USAGE
     exit 0
   fi
 done
+show_management_menu=true
+for argument in "$@"; do
+  if [[ "$argument" == --non-interactive ]]; then show_management_menu=false; fi
+done
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 fail() { printf 'yunlan: %s\n' "$*" >&2; exit 1; }
@@ -41,7 +45,11 @@ python3 "$ROOT_DIR/scripts/configure-install.py" --root "$ROOT_DIR" "$@"
 for variable in APP_MODE MAIN_DB_DRIVER MAIN_DB_DSN LOG_DB_DRIVER LOG_DB_DSN \
   MANAGEMENT_DB_DRIVER MANAGEMENT_DB_DSN NEWAPI_UPSTREAM NEWAPI_ADMIN_TOKEN \
   NEWAPI_ADMIN_USER_ID BIND_ADDRESS HOST_PORT LOGIN_PROBE_ENABLED \
-  SITEADMIN_COOKIE_SECURE TIMEZONE ADMIN_TOKEN FINANCE_PROXY_SECRET PROBE_SHARED_SECRET; do
+  PROBE_BIND_ADDRESS PROBE_HOST_PORT PROBE_TRUSTED_PROXIES \
+  SITEADMIN_COOKIE_SECURE TIMEZONE ADMIN_TOKEN FINANCE_PROXY_SECRET PROBE_SHARED_SECRET \
+  GEOIP_CITY_PATH GEOIP_ASN_PATH GEOIP_ISP_PATH GEOIP_ANONYMOUS_PATH \
+  IP_INTELLIGENCE_DIR NETWORK_HISTORY_COMPLETE DATA_DIR SITEADMIN_CONFIG_FILE \
+  QUOTA_PER_UNIT YUNLAN_IMAGE YUNLAN_FINANCE_IMAGE YUNLAN_PROBE_IMAGE; do
   unset "$variable"
 done
 [[ ! -L .env ]] || fail '.env must not be a symbolic link.'
@@ -66,8 +74,13 @@ printf '\nyunlan started. Published address: %s\n' "$published_address"
 if [[ "$mode" == demo ]]; then printf 'Demo login: root / 123456 (sample data only).\n'
 else printf 'Sign in with the existing NewAPI owner username and password.\n'; fi
 printf 'Finance shares this login. Configure AI and DingTalk in the workspace.\n'
+printf 'IP intelligence initialization starts in the background on first launch (GeoLite City/ASN, VPN/datacenter and Tor lists); progress appears in IP Analysis.\n'
+printf 'ISP and Anonymous-IP MMDB files are optional imports and are not part of the automatic download set.\n'
 printf 'Configuration: %s/.env; existing configuration and persistent volumes were preserved.\n' "$ROOT_DIR"
 printf 'Update: rerun the one-line installer. Stop from this directory: docker compose --project-name yunlan --profile probe down\n'
 if [[ "$probe_enabled" != true && "$probe_enabled" != 1 ]]; then
   printf 'Login probe is not enabled. Configure its upstream/routing before enabling the probe profile.\n'
+fi
+if [[ "$show_management_menu" == true && -t 0 && -t 1 && "${YUNLAN_MANAGE_MENU:-}" != 1 ]]; then
+  exec bash "$ROOT_DIR/scripts/manage-install.sh"
 fi

@@ -13,6 +13,23 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanfemg/yunlan/main/install.
 安装入口下载源码并执行仓库中的 `deploy.sh`，不是只启动一个主后台二进制。
 后台／前端、圈钱中心和可选登录注册探针均有对应容器构建。
 首次安装从源码构建镜像；不依赖预先发布的 GHCR 镜像。
+交互式安装完成后进入分级管理菜单，可管理服务、连接配置及 IP 情报；`--non-interactive`
+部署不会停留在菜单中。菜单停止服务时保留全部数据卷。
+
+安装后重新打开管理菜单：
+
+```bash
+cd /opt/yunlan && bash install.sh --menu
+```
+
+菜单包含安装／更新、服务管理、连接配置、IP 情报和帮助；服务管理与 IP 情报有二级操作。
+这是服务器安装管理菜单，网页内仍按功能导航。
+
+构建过程会安装前端、Go、Python 运行依赖。首次启动会立即在后台初始化核心 IP 情报：
+GeoLite City/ASN、VPN 与数据中心 IPv4/IPv6 网段、Tor 出口名单；文件校验后存入
+`data/ip-intelligence` 持久目录。安装服务不会等待这些外部数据源下载完成，进度和失败原因
+在「IP 分析 → IP 识别数据源」查看，支持手动重试。ISP 与 Anonymous-IP 的 MMDB 是可选独立
+来源，需在该页面导入；公共代理和住宅代理没有单独的数据源，未命中保持未知。
 
 root 用户默认安装在 `/opt/yunlan`，普通用户默认安装在 `$HOME/yunlan`。
 可明确指定目录：
@@ -32,14 +49,14 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanfemg/yunlan/main/install.
 首次默认使用真实模式。脚本只读检查本机运行的 NewAPI 容器：
 
 1. 只有一个匹配容器时自动选择；多个时由终端选择。
-2. 从该容器读取 PostgreSQL／MySQL 的 `SQL_DSN` 和独立 `LOG_SQL_DSN`。
-3. 将 yunlan 主服务加入对应的用户自定义 Docker 网络。
+2. 从容器环境读取 `SQL_DSN`／`LOG_SQL_DSN`，识别 PostgreSQL／MySQL 主库及独立日志库。
+3. 检查本机运行容器的 Docker 网络与已发布端口；地址能唯一映射到数据库容器时，改写成可达端点并把 Yunlan 加入对应网络。
 4. 生成本项目的 `.env` 和 `.yunlan.compose.yaml`，不修改 NewAPI 容器或配置。
 5. 校验 Compose，构建镜像并启动服务。
 
-发现 SQLite、ClickHouse 等当前不支持的数据库时不会冒充已接通。
-host 网络、默认 bridge 网络或回环数据库地址不能直接套用到独立容器；
-无法自动导入时交互填写从 yunlan 容器可达的连接，密码输入不回显。
+自动发现适用于本机 Docker 中可明确识别的 PostgreSQL／MySQL 端点。已有 `.env` 或系统连接配置优先保留；外部数据库、无法唯一映射的容器、不可达的 loopback 地址须提供 Yunlan 容器可访问的 DSN，密码在交互提示中不回显。SQLite、ClickHouse 不在自动接入支持范围内。
+
+安装器读取并复用 NewAPI 数据库连接，不会下载、复制或迁移 NewAPI 数据库文件。NewAPI 主库和日志库保持原位置；站长后台的 IP／风控事件表在首次运行相关功能时由后端自动创建，因此数据库账号需要对 `siteadmin_*` 表拥有建表及读写权限。日志分析使用 `LOG_DB_DSN`，未提供时沿用主库；任务日志从主库读取。
 
 明确选择 NewAPI 容器：
 
@@ -103,7 +120,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanfemg/yunlan/main/install.
 
 更新时重新执行同一条安装命令。引导脚本核对仓库、分支和工作树，
 仅作快进更新；有源码改动或提交分叉时退出，保留本地内容。
-本地源码目录运行 `bash install.sh` 或 `bash deploy.sh` 只部署当前检出内容。
+本地源码目录运行 `bash install.sh --update` 会先安全快进更新再部署；`bash deploy.sh` 只部署当前检出内容。
 
 从安装目录查看日志：
 

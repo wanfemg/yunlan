@@ -454,6 +454,14 @@ func (n *networkStore) downloadIntelligence(ctx context.Context, settings networ
 func (s *dashboardService) runIPMaintenanceScheduler(ctx context.Context) {
 	n := s.network
 	n.loadMaintenance()
+	// Populate the persistent IP intelligence directory on first boot instead
+	// of waiting for the periodic five-minute tick. The web service remains
+	// available while datasets download; status and failures are visible in the
+	// IP maintenance panel.
+	initial := n.maintenanceStatus()
+	if initial.Settings.AutoUpdate && initial.LastSuccess == 0 {
+		_, _ = n.queueIntelligenceUpdate()
+	}
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 	for {

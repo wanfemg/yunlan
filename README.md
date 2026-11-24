@@ -17,6 +17,14 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanfemg/yunlan/main/install.
 已有 `.env`、数据卷和机器密钥保留，源码有本地改动时停止覆盖。
 更新同样使用上面的一条命令。
 
+安装完成后再次打开分级管理菜单：
+
+```bash
+cd /opt/yunlan && bash install.sh --menu
+```
+
+首次启动会在后台下载核心 GeoIP、VPN／数据中心与 Tor 数据，安装命令不等待下载完成；ISP 与匿名 IP 数据库需要单独导入。
+
 新装默认按真实数据部署。网页登录使用现有 **NewAPI 站长账号和密码**，圈钱中心共用登录。
 服务默认绑定宿主机 `127.0.0.1:18080`，可通过同机反向代理访问；
 需要外网端口时在本项目 `.env` 中明确设置 `BIND_ADDRESS`。

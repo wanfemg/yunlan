@@ -15,6 +15,17 @@ import sys
 import tempfile
 from urllib.parse import unquote, urlsplit
 
+from docker_discovery import (
+    DiscoveryError,
+    container_environment,
+    container_host_network_mode,
+    container_http_port,
+    container_network_names,
+    discover_host_gateway_origin,
+    inspect_running_containers,
+    resolve_database_dsn,
+)
+
 
 class InstallError(Exception):
     pass
@@ -274,7 +285,7 @@ def select_container(args, tty):
 
 
 def driver_for(dsn):
-    if dsn.startswith(("postgres://", "postgresql://")) or re.search(r"(?:^|\s)(?:host|dbname)=", dsn):
+    if dsn.startswith(("postgres://", "postgresql://")) or re.search(r"(?:^|\s)(?:host|dbname)\s*=", dsn):
         return "postgres", dsn
     if dsn.startswith("mysql://"):
         parsed = urlsplit(dsn)
@@ -372,34 +383,84 @@ def main():
     tty = None if args.non_interactive else open_terminal()
     try:
         container, detected_networks, missing_detected_log = None, [], False
+        newapi_networks = []
         if args.newapi_container or os.environ.get("YUNLAN_NEWAPI_CONTAINER") or selected_mode == "live" and (not values.get("MAIN_DB_DSN") or not values.get("NEWAPI_UPSTREAM")):
             container = select_container(args, tty)
         if container:
-            env_items = container.get("Config", {}).get("Env", []) or []
-            environment = dict(item.split("=", 1) for item in env_items if isinstance(item, str) and "=" in item)
-            raw_networks = container.get("NetworkSettings", {}).get("Networks", {})
-            if isinstance(raw_networks, dict):
-                detected_networks = [name for name in raw_networks if name not in ("bridge", "host", "none") and 0 < len(name) <= 200][:8]
+            try:
+                running_containers = inspect_running_containers()
+            except DiscoveryError as error:
+                raise InstallError(str(error)) from None
+            environment = container_environment(container)
+            newapi_networks = container_network_names(container)
+            detected_networks = list(newapi_networks)
+            host_mode = container_host_network_mode(container)
             print("Detected NewAPI container: " + str(container.get("Name", "")).lstrip("/"))
-            can_import_database = bool(detected_networks)
-            if not can_import_database:
-                print("Automatic database import is unavailable without a shared user-defined Docker network.")
-            if not values.get("MAIN_DB_DSN") and environment.get("SQL_DSN") and can_import_database and not dsn_uses_loopback(environment["SQL_DSN"]):
-                driver, dsn = driver_for(environment["SQL_DSN"])
-                values["MAIN_DB_DRIVER"] = updates["MAIN_DB_DRIVER"] = driver
-                values["MAIN_DB_DSN"] = updates["MAIN_DB_DSN"] = dsn
-                print("Detected the main database connection; its value is not displayed.")
-            if not values.get("LOG_DB_DSN") and environment.get("LOG_SQL_DSN") and can_import_database and not dsn_uses_loopback(environment["LOG_SQL_DSN"]):
-                driver, dsn = driver_for(environment["LOG_SQL_DSN"])
-                values["LOG_DB_DRIVER"] = updates["LOG_DB_DRIVER"] = driver
-                values["LOG_DB_DSN"] = updates["LOG_DB_DSN"] = dsn
-                print("Detected a separate log database; its connection value is not displayed.")
-            missing_detected_log = bool(environment.get("LOG_SQL_DSN") and not values.get("LOG_DB_DSN"))
-            if not values.get("NEWAPI_UPSTREAM") and detected_networks:
-                name, port = str(container.get("Name", "")).lstrip("/"), environment.get("PORT", "3000")
-                if not port.isdecimal() or not 1 <= int(port) <= 65535:
-                    raise InstallError("The detected NewAPI HTTP port is invalid.")
-                values["NEWAPI_UPSTREAM"] = updates["NEWAPI_UPSTREAM"] = "http://" + name + ":" + port
+            for prefix, upstream_key, env_key in (
+                ("MAIN_DB", "MAIN_DB_DSN", "SQL_DSN"),
+                ("LOG_DB", "LOG_DB_DSN", "LOG_SQL_DSN"),
+            ):
+                source_dsn = values.get(upstream_key) or environment.get(env_key, "")
+                if not source_dsn:
+                    continue
+                saved_workspace_dsn = stored_connections.get(upstream_key) == source_dsn
+                try:
+                    driver, dsn = driver_for(source_dsn)
+                except InstallError:
+                    # Keep any explicit/saved value untouched. An unsupported
+                    # NewAPI database still needs a clear manual configuration.
+                    if values.get(upstream_key):
+                        raise
+                    if prefix == "MAIN_DB":
+                        raise
+                    missing_detected_log = True
+                    print("Detected an unsupported separate NewAPI log database; provide a supported reachable log DSN.")
+                    continue
+                dsn, database_networks, resolution_message = resolve_database_dsn(
+                    dsn, driver, running_containers, newapi_host_mode=host_mode,
+                )
+                if resolution_message:
+                    if saved_workspace_dsn:
+                        raise InstallError("A saved database endpoint is unreachable from yunlan; update that connection in System Connections. The saved configuration was preserved.")
+                    print(prefix.replace("_", " ") + ": " + resolution_message)
+                    if prefix == "MAIN_DB":
+                        if not values.get(upstream_key):
+                            values.pop("MAIN_DB_DRIVER", None)
+                        values.pop(upstream_key, None)
+                        updates.pop("MAIN_DB_DRIVER", None)
+                        updates.pop(upstream_key, None)
+                    else:
+                        missing_detected_log = True
+                        if not values.get(upstream_key):
+                            values.pop("LOG_DB_DRIVER", None)
+                        values.pop(upstream_key, None)
+                        updates.pop("LOG_DB_DRIVER", None)
+                        updates.pop(upstream_key, None)
+                    continue
+                if saved_workspace_dsn and dsn != source_dsn:
+                    raise InstallError("A saved database endpoint needs network-address rewriting; update that connection in System Connections. The saved configuration was preserved.")
+                detected_networks.extend(database_networks)
+                values[prefix + "_DRIVER"] = driver
+                values[upstream_key] = dsn
+                if not saved_workspace_dsn and saved.get(upstream_key) != dsn:
+                    updates[prefix + "_DRIVER"] = driver
+                    updates[upstream_key] = dsn
+                print(("Detected the main" if prefix == "MAIN_DB" else "Detected a separate log") + " database connection; its value is not displayed.")
+            detected_networks = list(dict.fromkeys(name for name in detected_networks if name and len(name) <= 200))[:16]
+            if not values.get("NEWAPI_UPSTREAM"):
+                port = container_http_port(container, environment)
+                if host_mode:
+                    origin = discover_host_gateway_origin(port)
+                    if origin:
+                        values["NEWAPI_UPSTREAM"] = updates["NEWAPI_UPSTREAM"] = origin
+                        print("Detected a reachable NewAPI host-gateway address.")
+                    else:
+                        print("NewAPI uses host networking; enter its externally reachable origin because no reachable Docker host gateway was detected.")
+                elif newapi_networks:
+                    name = str(container.get("Name", "")).lstrip("/")
+                    values["NEWAPI_UPSTREAM"] = updates["NEWAPI_UPSTREAM"] = "http://" + name + ":" + str(port)
+                else:
+                    print("NewAPI has no attachable Docker network; enter an origin reachable from yunlan.")
         if selected_mode == "live":
             if not values.get("MAIN_DB_DSN"):
                 if args.non_interactive:
