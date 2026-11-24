@@ -220,9 +220,34 @@ def saved_workspace_connections():
     return selected
 
 
+class Terminal:
+    """Use separate streams so a non-seekable TTY does not require r+ buffering."""
+
+    def __init__(self):
+        self.reader = open("/dev/tty", "r", encoding="utf-8", buffering=1)
+        try:
+            self.writer = open("/dev/tty", "w", encoding="utf-8", buffering=1)
+        except OSError:
+            self.reader.close()
+            raise
+
+    def write(self, value):
+        return self.writer.write(value)
+
+    def flush(self):
+        return self.writer.flush()
+
+    def readline(self):
+        return self.reader.readline()
+
+    def close(self):
+        self.reader.close()
+        self.writer.close()
+
+
 def open_terminal():
     try:
-        return open("/dev/tty", "r+", encoding="utf-8")
+        return Terminal()
     except OSError:
         return None
 
@@ -255,29 +280,35 @@ def select_container(args, tty):
         )
         if result.returncode:
             raise InstallError("Cannot enumerate running Docker containers.")
-        candidates = []
+        running = []
         for line in result.stdout.splitlines():
             try:
                 row = json.loads(line)
             except ValueError:
                 continue
             name = str(row.get("Names", ""))
-            text = (name + " " + str(row.get("Image", ""))).lower()
-            if re.search(r"new[-_]?api", text) and not re.search(r"site-admin|new_api_tools|newapi-tools|yunlan|login-probe|notifier", text):
-                candidates.append((str(row.get("ID", "")), name))
-        if not candidates:
+            identifier = str(row.get("ID", ""))
+            if identifier:
+                running.append((identifier, name, str(row.get("Image", ""))))
+
+        # Follow NewAPI Tools discovery order and token boundaries. The loose
+        # old pattern also matched database/helper images containing "newapi".
+        selected = next((identifier for identifier, name, _image in running
+                         if re.search(r"(^|[-_])new-api([-_]|$)", name, re.IGNORECASE)), "")
+        if not selected:
+            labeled = subprocess.run(
+                ["docker", "ps", "-q", "--filter", "label=com.docker.compose.service=new-api"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                encoding="utf-8", errors="replace", check=False, timeout=25,
+            )
+            if labeled.returncode:
+                raise InstallError("Cannot inspect Docker Compose service labels.")
+            selected = next(iter(labeled.stdout.split()), "")
+        if not selected:
+            selected = next((identifier for identifier, _name, image in running
+                             if re.search(r"(^|/)new-api([-_:]|$)", image, re.IGNORECASE)), "")
+        if not selected:
             return None
-        selected = candidates[0][0]
-        if len(candidates) > 1:
-            if args.non_interactive or tty is None:
-                raise InstallError("Multiple NewAPI containers found; use --newapi-container NAME.")
-            print("Running NewAPI containers:")
-            for index, (_, name) in enumerate(candidates, 1):
-                print("  " + str(index) + ". " + name)
-            choice = prompt(tty, "NewAPI container number")
-            if not choice.isdecimal() or not 1 <= int(choice) <= len(candidates):
-                raise InstallError("Invalid NewAPI container selection.")
-            selected = candidates[int(choice) - 1][0]
         inspected = docker_json("inspect", selected)
     if not isinstance(inspected, list) or len(inspected) != 1:
         raise InstallError("The selected NewAPI container was not found.")
