@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import tempfile
 import unittest
@@ -25,7 +26,8 @@ class DeployCLITests(unittest.TestCase):
         shutil.copyfile(ROOT / "deploy.sh", self.root / "deploy.sh")
         (self.root / "compose.yaml").write_text("services: {}\n", encoding="utf-8")
         (self.root / ".env").write_text("APP_MODE=demo\n", encoding="utf-8")
-        for name in ("configure-install.py", "verify-deployment.py", "deploy-diagnostics.py"):
+        for name in ("configure-install.py", "verify-deployment.py", "deploy-diagnostics.py",
+                     "prepare-compose.py", "migrate-compose.py", "check-panel-compose.py"):
             (self.root / "scripts" / name).write_text("# fixture\n", encoding="utf-8")
         self.log = self.root / "calls"
         self.fixture(
@@ -51,11 +53,16 @@ printf 'python3 %s\\n' "$*" >> "$FAKE_CALLS"
 case "$1" in
   */configure-install.py)
     case " $* " in
-      *" --read LOGIN_PROBE_ENABLED "*) printf 'false\\n' ;;
+      *" --read LOGIN_PROBE_ENABLED "*) printf '%s\\n' "${FAKE_PROBE_ENABLED:-false}" ;;
       *" --read APP_MODE "*) printf 'demo\\n' ;;
     esac ;;
   */verify-deployment.py) exit "${FAKE_VERIFY_FAIL:-0}" ;;
   */deploy-diagnostics.py) printf 'fixture diagnostics\\n' >&2 ;;
+  */prepare-compose.py)
+    if [[ "${FAKE_PREPARE_FAIL:-0}" != 0 ]]; then exit "$FAKE_PREPARE_FAIL"; fi
+    printf '%s/.yunlan.runtime.yaml\\n' "$3" ;;
+  */migrate-compose.py) exit "${FAKE_MIGRATE_FAIL:-0}" ;;
+  */check-panel-compose.py) exit "${FAKE_PANEL_FAIL:-0}" ;;
 esac
 """,
         )
@@ -119,6 +126,46 @@ esac
         result, calls = self.deploy(FAKE_VERIFY_FAIL="19")
         self.assertEqual(result.returncode, 19, result.stdout)
         self.assertIn("/verify-deployment.py", calls)
+        self.assertIn("/deploy-diagnostics.py", calls)
+        self.assertNotIn("[部署成功]", result.stdout)
+
+    def test_network_overlay_never_reaches_container_file_labels(self):
+        (self.root / ".yunlan.compose.yaml").write_text(
+            '{"services":{"site-admin":{"networks":["default","newapi"]}},'
+            '"networks":{"newapi":{"external":true}}}', encoding="utf-8",
+        )
+        result, calls = self.deploy(FAKE_PROBE_ENABLED="true")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("/prepare-compose.py", calls)
+        self.assertIn("/migrate-compose.py", calls)
+        for line in calls.splitlines():
+            if not line.startswith("docker compose --project-name"):
+                continue
+            arguments = shlex.split(line)
+            self.assertEqual(arguments.count("-f"), 1, line)
+            compose_file = arguments[arguments.index("-f") + 1]
+            self.assertTrue(compose_file.endswith("/.yunlan.runtime.yaml"), line)
+            self.assertNotIn(",", compose_file)
+        self.assertLess(calls.index("/migrate-compose.py"), calls.index(" up -d"))
+
+    def test_failed_manifest_preparation_never_creates_containers(self):
+        result, calls = self.deploy(FAKE_PREPARE_FAIL="20")
+        self.assertEqual(result.returncode, 20, result.stdout)
+        self.assertNotIn(" pull", calls)
+        self.assertNotIn(" up ", calls)
+        self.assertNotIn("[部署成功]", result.stdout)
+
+    def test_failed_label_migration_never_starts_or_reports_success(self):
+        result, calls = self.deploy(FAKE_MIGRATE_FAIL="21")
+        self.assertEqual(result.returncode, 21, result.stdout)
+        self.assertNotIn(" up ", calls)
+        self.assertIn("/deploy-diagnostics.py", calls)
+        self.assertNotIn("[部署成功]", result.stdout)
+
+    def test_failed_panel_container_or_log_check_never_reports_success(self):
+        result, calls = self.deploy(FAKE_PANEL_FAIL="22")
+        self.assertEqual(result.returncode, 22, result.stdout)
+        self.assertIn("/check-panel-compose.py", calls)
         self.assertIn("/deploy-diagnostics.py", calls)
         self.assertNotIn("[部署成功]", result.stdout)
 

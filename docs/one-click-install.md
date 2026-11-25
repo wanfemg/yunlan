@@ -52,7 +52,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanfemg/yunlan/main/install.
 1. 按容器名、Compose 服务标签、镜像名顺序选择匹配的 NewAPI，支持明确指定容器。
 2. 从容器环境读取 `SQL_DSN`／`LOG_SQL_DSN`，识别 PostgreSQL／MySQL 主库及独立日志库。
 3. 检查本机运行容器的 Docker 网络与已发布端口；地址能唯一映射到数据库容器时，改写成可达端点并把 Yunlan 加入对应网络。
-4. 生成本项目的 `.env` 和 `.yunlan.compose.yaml`，不修改 NewAPI 容器或配置。
+4. 生成本项目的 `.env` 和 `.yunlan.compose.yaml`，合并为单一运行文件 `.yunlan.runtime.yaml`，不修改 NewAPI 容器或配置。
 5. 校验 Compose，拉取镜像并启动服务，再核对全部必要容器的健康状态。
 6. 验证首页 HTML、登录入口与正式模式的主库、日志库、管理库连接，全部通过才报成功。
 
@@ -129,6 +129,19 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanfemg/yunlan/main/install.
 
 ## 更新与维护
 
+实际运行的编排文件为安装目录中的 `.yunlan.runtime.yaml`，root 默认完整路径：
+
+```text
+/opt/yunlan/.yunlan.runtime.yaml
+```
+
+宝塔「从文件导入」使用这一个文件路径，不填写逗号分隔的文件列表。
+旧版部署使用两个 `-f`，Docker 将路径记为逗号串；部分宝塔版本会把整串当成一个文件，
+报“文件不存在”，因而无法读取容器列表、日志及运行状态。安装器会将旧 Yunlan 容器
+迁移到单文件标签，短暂重启本项目并保留 `.env`、后台配置、数据卷和外部网络。
+迁移后刷新宝塔编排列表并重新打开详情。单凭旧面板的“已停止／暂无容器”不能判断 Docker 实际状态。
+`initialize-data` 正常退出仍是预期行为。
+
 更新时重新执行同一条安装命令。引导脚本核对仓库、分支和工作树，
 仅作快进更新；有源码改动或提交分叉时退出，保留本地内容。
 本地源码目录运行 `bash install.sh --update` 会先安全快进更新再部署；`bash deploy.sh` 只部署当前检出内容。
@@ -136,13 +149,13 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanfemg/yunlan/main/install.
 从安装目录查看日志：
 
 ```bash
-docker compose --project-name yunlan --profile probe logs -f
+docker compose --project-name yunlan -f .yunlan.runtime.yaml logs -f
 ```
 
 停止当前项目：
 
 ```bash
-docker compose --project-name yunlan --profile probe down
+docker compose --project-name yunlan -f .yunlan.runtime.yaml down
 ```
 
 更新和停止均不删除持久数据卷。备份需要同时保存 `.env`、IP 情报目录，
@@ -156,4 +169,6 @@ docker compose --project-name yunlan --profile probe down
 发布前在 Linux Docker 中启动全部服务，验证网页登录、首页和财务代理，
 并用 Compose 2.16 重建容器核对兼容性。镜像发布后还会从空目录运行远程一键安装，
 核对下载源码与三个已运行镜像的提交一致，重测网页登录和财务代理。
+同时复现旧双文件标签，验证迁移后 Compose 列表只返回单个存在的文件路径，
+使用相同文件读取容器和日志；覆盖初始化容器、旧探针、外部网络与 Compose 2.16。
 这些验证不代表已经在目标服务器部署。

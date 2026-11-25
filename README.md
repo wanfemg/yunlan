@@ -90,7 +90,10 @@ http://127.0.0.1:18080
 ```
 
 脚本保留已有配置。修改本项目 `.env` 后再次运行 `bash deploy.sh`。
-生成的 `.yunlan.compose.yaml` 保存已探测的外部网络，部署入口自动叠加使用。
+生成的 `.yunlan.compose.yaml` 保存已探测的外部网络，安装器将它与基础配置合并为
+`.yunlan.runtime.yaml`；实际启动、管理菜单与宝塔只使用这一个运行文件。
+已有双文件部署会自动迁移容器标签并短暂重启本项目，配置与数据卷保留。
+宝塔「从文件导入」填写安装目录内 `.yunlan.runtime.yaml` 的完整路径。
 查看日志和停止服务时使用相同 Compose 项目名 `yunlan`，不要加 `down -v` 删除数据卷。
 
 The standard Compose setup starts the site admin and integrated finance service. The login/registration probe is an optional Compose profile. See the [integrated deployment guide](docs/integrated-deployment.md).

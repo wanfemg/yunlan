@@ -8,8 +8,7 @@
 !.env.example
 .github
 .runtime
-.yunlan.compose.yaml
-.yunlan*.tmp
+.yunlan*
 **/node_modules
 **/dist
 **/coverage

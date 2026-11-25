@@ -62,7 +62,7 @@ class FakeDocker:
 
 
 class VerificationTests(unittest.TestCase):
-    def run_verifier(self, docker, *, timeout=2, mode="demo", probe=False):
+    def run_verifier(self, docker, *, timeout=2, mode="demo", probe=False, compose_file=None):
         now = [0.0]
         messages = []
 
@@ -74,6 +74,7 @@ class VerificationTests(unittest.TestCase):
                 patch.object(verification.time, "sleep", side_effect=sleep):
             verification.verify_deployment(
                 "yunlan", timeout, mode=mode, probe=probe, report=messages.append,
+                compose_file=compose_file,
             )
         return messages
 
@@ -159,6 +160,39 @@ class VerificationTests(unittest.TestCase):
         foreign["Config"]["Labels"]["com.docker.compose.project"] = "another-project"
         with self.assertRaisesRegex(verification.VerificationError, "finance"):
             self.run_verifier(FakeDocker([container("site-admin"), foreign]))
+
+    def test_comma_separated_compose_file_labels_cannot_pass(self):
+        path = "/opt/yunlan/.yunlan.runtime.yaml"
+        docker = FakeDocker()
+        for item in docker.containers:
+            item["Config"]["Labels"]["com.docker.compose.project.config_files"] = path
+        docker.containers[0]["Config"]["Labels"]["com.docker.compose.project.config_files"] = (
+            "/opt/yunlan/compose.yaml,/opt/yunlan/.yunlan.compose.yaml"
+        )
+        with self.assertRaisesRegex(verification.VerificationError, "编排文件"):
+            self.run_verifier(docker, compose_file=path)
+
+    def test_single_compose_file_label_is_required_on_every_service(self):
+        path = "/opt/yunlan/.yunlan.runtime.yaml"
+        docker = FakeDocker()
+        for item in docker.containers:
+            item["Config"]["Labels"]["com.docker.compose.project.config_files"] = path
+        self.run_verifier(docker, compose_file=path)
+
+    def test_stale_initializer_label_cannot_pass_panel_validation(self):
+        path = "/opt/yunlan/.yunlan.runtime.yaml"
+        docker = FakeDocker()
+        for item in docker.containers:
+            item["Config"]["Labels"]["com.docker.compose.project.config_files"] = path
+        initializer = container("site-admin", running=False, status="exited")
+        initializer["Id"] = "d" * 64
+        initializer["Config"]["Labels"]["com.docker.compose.service"] = "initialize-data"
+        initializer["Config"]["Labels"]["com.docker.compose.project.config_files"] = (
+            "/opt/yunlan/compose.yaml,/opt/yunlan/.yunlan.compose.yaml"
+        )
+        docker.containers.append(initializer)
+        with self.assertRaisesRegex(verification.VerificationError, "initialize-data.*编排文件"):
+            self.run_verifier(docker, compose_file=path)
 
     def test_initializer_without_health_is_safe_to_inspect(self):
         initializer = {

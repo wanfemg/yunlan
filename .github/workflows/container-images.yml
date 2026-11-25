@@ -53,7 +53,28 @@ jobs:
       - name: Build and deploy all services
         run: bash deploy.sh --demo --build --non-interactive
       - name: Verify published ports and owner workflow
-        run: python3 scripts/smoke-deployment.py --probe-url http://127.0.0.1:18081
+        run: |
+          python3 scripts/smoke-deployment.py --probe-url http://127.0.0.1:18081
+          python3 scripts/check-panel-compose.py --root "$PWD"
+      - name: Reproduce and migrate legacy multi-file labels
+        run: |
+          docker network create yunlan-ci-upstream
+          printf '%s\n' '{"services":{"site-admin":{"networks":["default","ci_upstream"]}},"networks":{"ci_upstream":{"external":true,"name":"yunlan-ci-upstream"}}}' > .yunlan.compose.yaml
+          docker compose --env-file .env -f compose.yaml -f .yunlan.compose.yaml --profile probe up -d --no-build --force-recreate
+          python3 scripts/verify-deployment.py --mode demo --probe
+          python3 -c 'import json,subprocess; p=next(p for p in json.loads(subprocess.check_output(["docker","compose","ls","--all","--format","json"])) if p["Name"]=="yunlan"); assert "," in p["ConfigFiles"], "legacy multi-file labels not reproduced"'
+          bash deploy.sh --demo --non-interactive
+          python3 scripts/check-panel-compose.py --root "$PWD"
+          python3 scripts/smoke-deployment.py --probe-url http://127.0.0.1:18081
+      - name: Disable a legacy probe without leaving stale file labels
+        env:
+          LOGIN_PROBE_ENABLED: "false"
+        run: |
+          docker compose --env-file .env -f compose.yaml -f .yunlan.compose.yaml --profile probe up -d --no-build --force-recreate
+          bash deploy.sh --demo --non-interactive
+          test -z "$(docker ps -a --filter label=com.docker.compose.project=yunlan --filter label=com.docker.compose.service=login-probe --format '{{.ID}}')"
+          python3 scripts/check-panel-compose.py --root "$PWD"
+          python3 scripts/smoke-deployment.py
       - name: Install older Compose without wait-timeout
         run: |
           mkdir -p "$HOME/.docker/cli-plugins"
@@ -62,16 +83,17 @@ jobs:
           docker compose version
       - name: Recreate services with older Compose
         run: |
-          docker compose --profile probe config --quiet
-          docker compose --profile probe up -d --no-build --force-recreate
-          python3 scripts/verify-deployment.py --mode demo --probe
+          bash deploy.sh --demo --non-interactive
+          docker compose -f .yunlan.runtime.yaml up -d --no-build --force-recreate
+          python3 scripts/verify-deployment.py --mode demo --probe --compose-file "$PWD/.yunlan.runtime.yaml"
+          python3 scripts/check-panel-compose.py --root "$PWD"
           python3 scripts/smoke-deployment.py --probe-url http://127.0.0.1:18081
       - name: Show deployment diagnostics on failure
         if: failure()
-        run: python3 scripts/deploy-diagnostics.py --root "$PWD" --stage CI --exit-code 1 -- --project-name yunlan --profile probe
+        run: python3 scripts/deploy-diagnostics.py --root "$PWD" --stage CI --exit-code 1 -- --project-name yunlan -f "$PWD/.yunlan.runtime.yaml"
       - name: Stop test services
         if: always()
-        run: docker compose --profile probe down
+        run: docker compose -f .yunlan.runtime.yaml down --remove-orphans
 
   images:
     name: Build ${{ matrix.component }}
@@ -156,13 +178,14 @@ jobs:
             revision="$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$container")"
             test "$revision" = "$GITHUB_SHA"
           done
+          python3 "$YUNLAN_INSTALL_DIR/scripts/check-panel-compose.py" --root "$YUNLAN_INSTALL_DIR"
           python3 "$YUNLAN_INSTALL_DIR/scripts/smoke-deployment.py" --probe-url http://127.0.0.1:18081
       - name: Show installation diagnostics on failure
         if: failure()
-        run: python3 scripts/deploy-diagnostics.py --root "$YUNLAN_INSTALL_DIR" --stage published-install --exit-code 1 -- --project-name yunlan --project-directory "$YUNLAN_INSTALL_DIR" -f "$YUNLAN_INSTALL_DIR/compose.yaml" --profile probe
+        run: python3 scripts/deploy-diagnostics.py --root "$YUNLAN_INSTALL_DIR" --stage published-install --exit-code 1 -- --project-name yunlan --project-directory "$YUNLAN_INSTALL_DIR" -f "$YUNLAN_INSTALL_DIR/.yunlan.runtime.yaml"
       - name: Stop installed services
         if: always()
         run: |
           if [[ -f "$YUNLAN_INSTALL_DIR/.env" ]]; then
-            docker compose --project-directory "$YUNLAN_INSTALL_DIR" --env-file "$YUNLAN_INSTALL_DIR/.env" -f "$YUNLAN_INSTALL_DIR/compose.yaml" --profile probe down
+            docker compose --project-directory "$YUNLAN_INSTALL_DIR" --env-file "$YUNLAN_INSTALL_DIR/.env" -f "$YUNLAN_INSTALL_DIR/.yunlan.runtime.yaml" down --remove-orphans
           fi

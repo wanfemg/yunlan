@@ -69,7 +69,7 @@ def compose_containers(project_name):
         raise VerificationError("Docker 返回的容器状态无效。") from None
 
 
-def wait_for_services(project_name, timeout, *, probe=False, report=print):
+def wait_for_services(project_name, timeout, *, probe=False, compose_file=None, report=print):
     expected = ("site-admin", "finance", "login-probe") if probe else ("site-admin", "finance")
     deadline = time.monotonic() + timeout
     previous_pending = None
@@ -78,8 +78,12 @@ def wait_for_services(project_name, timeout, *, probe=False, report=print):
         for item in compose_containers(project_name):
             labels = (item.get("Config") or {}).get("Labels") or {}
             service = labels.get(SERVICE_LABEL)
-            if (labels.get(PROJECT_LABEL) != project_name or service not in expected
+            if (labels.get(PROJECT_LABEL) != project_name
                     or str(labels.get(ONEOFF_LABEL, "")).lower() == "true"):
+                continue
+            if compose_file and labels.get(PROJECT_LABEL + ".config_files") != compose_file:
+                raise VerificationError("服务 " + service + " 的编排文件标签不是当前单文件路径。")
+            if service not in expected:
                 continue
             if service in matched:
                 raise VerificationError("服务 " + service + " 匹配到多个容器。")
@@ -167,14 +171,15 @@ def verify_application(identifier, mode, *, report=print):
         raise VerificationError("NewAPI 管理接口连接检查未通过。")
 
 
-def verify_deployment(project_name="yunlan", timeout=180, *, mode="live", probe=False, report=print):
+def verify_deployment(project_name="yunlan", timeout=180, *, mode="live", probe=False,
+                      compose_file=None, report=print):
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", project_name):
         raise VerificationError("Compose 项目名称无效。")
     if timeout <= 0:
         raise VerificationError("验收超时时间必须大于 0 秒。")
     if mode not in ("live", "demo"):
         raise VerificationError("验收模式必须为 live 或 demo。")
-    services = wait_for_services(project_name, timeout, probe=probe, report=report)
+    services = wait_for_services(project_name, timeout, probe=probe, compose_file=compose_file, report=report)
     verify_application(services["site-admin"], mode, report=report)
     report("容器健康、网页和登录入口已通过验证" + ("。" if mode == "demo" else "，正式数据库连接已通过验证。"))
 
@@ -199,9 +204,11 @@ def main():
     parser.add_argument("--timeout", type=int, default=180, metavar="秒数", help="等待容器健康的超时时间，默认 180 秒。")
     parser.add_argument("--mode", choices=("live", "demo"), default="live", help="验收运行模式，默认 live。")
     parser.add_argument("--probe", action="store_true", help="同时验证登录探针容器。")
+    parser.add_argument("--compose-file", help="要求容器标签使用指定的单个编排文件。")
     arguments = parser.parse_args()
     try:
-        verify_deployment(arguments.project_name, arguments.timeout, mode=arguments.mode, probe=arguments.probe)
+        verify_deployment(arguments.project_name, arguments.timeout, mode=arguments.mode,
+                          probe=arguments.probe, compose_file=arguments.compose_file)
     except VerificationError as error:
         print("yunlan: " + str(error), file=sys.stderr)
         return 1

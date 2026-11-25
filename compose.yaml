@@ -37,8 +37,14 @@ services:
       - ALL
     stop_grace_period: 15s
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-18080}:18080"
-      - "${PROBE_BIND_ADDRESS:-127.0.0.1}:${PROBE_HOST_PORT:-18081}:18081"
+      - target: 18080
+        published: "${HOST_PORT:-18080}"
+        host_ip: "${BIND_ADDRESS:-127.0.0.1}"
+        protocol: tcp
+      - target: 18081
+        published: "${PROBE_HOST_PORT:-18081}"
+        host_ip: "${PROBE_BIND_ADDRESS:-127.0.0.1}"
+        protocol: tcp
     environment:
       APP_MODE: ${APP_MODE:-demo}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}

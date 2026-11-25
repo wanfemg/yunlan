@@ -76,6 +76,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanfemg/yunlan/main/install.
 已有安装保留原绑定。默认拉取已发布镜像，`--build` 使用当前源码构建。
 密钥只保存在权限为 `600` 的 `.env`，没有额外财务登录口令。
 安装器在全部常驻容器健康、网页、登录入口及正式数据库检查通过后才报告成功。
+运行编排统一为安装目录中的 `.yunlan.runtime.yaml`，宝塔从文件导入时填写此路径。
+旧双文件部署会迁移旧容器标签并重启本项目，保留数据卷；初始化容器正常退出不代表后台停止。
 
 三项服务如下：
 
@@ -94,11 +96,10 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanfemg/yunlan/main/install.
 在系统连接页保存配置后，同步重启相关进程：
 
 ```bash
-docker compose restart site-admin finance
-docker compose --profile probe up -d --build
+docker compose -f .yunlan.runtime.yaml restart
 ```
 
-使用上面的探针命令前，必须已配置 NewAPI 上游。探针能启动不等于入口流量已接通：
+启用探针前，必须已配置 NewAPI 上游。探针能启动不等于入口流量已接通：
 控制台 HTML、`/_siteadmin_probe/`、注册和认证路径需由实际入口反代到探针。
 模型调用路径继续转发 NewAPI，调用 IP 仍以请求日志为准。
 本编排不修改现有线上反向代理或 NewAPI 部署。

@@ -82,7 +82,8 @@ clear_compose_environment() {
 }
 
 build_compose_args() {
-  local probe_enabled
+  local probe_enabled runtime_compose
+  local -a prepare_args
   [[ -f "$ROOT_DIR/.env" ]] || {
     printf 'yunlan: 尚未生成 .env 配置。请先打开“连接配置”运行部署向导。\n' >&2
     return 1
@@ -104,26 +105,29 @@ build_compose_args() {
     return 1
   }
 
-  COMPOSE_ARGS=(docker compose --project-name yunlan --project-directory "$ROOT_DIR" --env-file "$ROOT_DIR/.env" -f "$ROOT_DIR/compose.yaml")
-  if [[ -f "$ROOT_DIR/.yunlan.compose.yaml" ]]; then
-    COMPOSE_ARGS+=(-f "$ROOT_DIR/.yunlan.compose.yaml")
-  fi
-  if [[ "$probe_enabled" == true || "$probe_enabled" == 1 ]]; then
-    COMPOSE_ARGS+=(--profile probe)
-  fi
-  VERIFY_ARGS=(--project-name yunlan --mode "$(python3 "$ROOT_DIR/scripts/configure-install.py" --root "$ROOT_DIR" --read APP_MODE)")
-  if [[ "$probe_enabled" == true || "$probe_enabled" == 1 ]]; then VERIFY_ARGS+=(--probe); fi
   clear_compose_environment
+  prepare_args=(--root "$ROOT_DIR")
+  if [[ "$probe_enabled" == true || "$probe_enabled" == 1 ]]; then prepare_args+=(--probe); fi
+  runtime_compose="$(python3 "$ROOT_DIR/scripts/prepare-compose.py" "${prepare_args[@]}")" || return 1
+  [[ "$runtime_compose" == "$ROOT_DIR/.yunlan.runtime.yaml" ]] || return 1
+  COMPOSE_ARGS=(docker compose --project-name yunlan --project-directory "$ROOT_DIR" --env-file "$ROOT_DIR/.env" -f "$runtime_compose")
+  VERIFY_ARGS=(--project-name yunlan --mode "$(python3 "$ROOT_DIR/scripts/configure-install.py" --root "$ROOT_DIR" --read APP_MODE)" --compose-file "$runtime_compose")
+  if [[ "$probe_enabled" == true || "$probe_enabled" == 1 ]]; then VERIFY_ARGS+=(--probe); fi
 }
 
 start_services() {
-  "${COMPOSE_ARGS[@]}" up -d --no-build &&
-    python3 "$ROOT_DIR/scripts/verify-deployment.py" "${VERIFY_ARGS[@]}"
+  python3 "$ROOT_DIR/scripts/migrate-compose.py" --root "$ROOT_DIR" &&
+    "${COMPOSE_ARGS[@]}" up -d --no-build --remove-orphans &&
+    python3 "$ROOT_DIR/scripts/verify-deployment.py" "${VERIFY_ARGS[@]}" &&
+    python3 "$ROOT_DIR/scripts/check-panel-compose.py" --root "$ROOT_DIR"
 }
 
 restart_services() {
-  "${COMPOSE_ARGS[@]}" restart &&
-    python3 "$ROOT_DIR/scripts/verify-deployment.py" "${VERIFY_ARGS[@]}"
+  python3 "$ROOT_DIR/scripts/migrate-compose.py" --root "$ROOT_DIR" &&
+    "${COMPOSE_ARGS[@]}" up -d --no-build --remove-orphans &&
+    "${COMPOSE_ARGS[@]}" restart &&
+    python3 "$ROOT_DIR/scripts/verify-deployment.py" "${VERIFY_ARGS[@]}" &&
+    python3 "$ROOT_DIR/scripts/check-panel-compose.py" --root "$ROOT_DIR"
 }
 
 service_menu() {

@@ -74,17 +74,16 @@ done
 [[ ! -L data && ! -L data/ip-intelligence ]] ||
   fail '受管理的数据目录不能是符号链接。'
 mkdir -p data/ip-intelligence
-compose_args=(--project-name yunlan --project-directory "$ROOT_DIR" --env-file "$ROOT_DIR/.env" -f "$ROOT_DIR/compose.yaml")
-if [[ -f "$ROOT_DIR/.yunlan.compose.yaml" ]]; then
-  [[ ! -L "$ROOT_DIR/.yunlan.compose.yaml" ]] || fail '生成的网络配置不能是符号链接。'
-  compose_args+=(-f "$ROOT_DIR/.yunlan.compose.yaml")
-fi
 probe_enabled="$(python3 "$ROOT_DIR/scripts/configure-install.py" --root "$ROOT_DIR" --read LOGIN_PROBE_ENABLED)"
-if [[ "$probe_enabled" == true || "$probe_enabled" == 1 ]]; then compose_args+=(--profile probe); fi
+prepare_args=(--root "$ROOT_DIR")
+if [[ "$probe_enabled" == true || "$probe_enabled" == 1 ]]; then prepare_args+=(--probe); fi
 
 # Rendered Compose config contains secrets, so validate without printing it.
 deployment_stage='容器编排校验'
-printf '\n[2/5] 校验 yunlan 容器编排…\n'
+printf '\n[2/5] 生成并校验宝塔可读取的单文件编排…\n'
+runtime_compose="$(python3 "$ROOT_DIR/scripts/prepare-compose.py" "${prepare_args[@]}")"
+[[ "$runtime_compose" == "$ROOT_DIR/.yunlan.runtime.yaml" ]] || fail '生成的运行编排路径无效。'
+compose_args=(--project-name yunlan --project-directory "$ROOT_DIR" --env-file "$ROOT_DIR/.env" -f "$runtime_compose")
 docker compose "${compose_args[@]}" config --quiet
 if [[ "$build_images" == true ]]; then
   deployment_stage='源码镜像构建'
@@ -98,13 +97,15 @@ else
 fi
 deployment_stage='容器创建和启动'
 printf '\n[4/5] 创建并启动后台、财务与已启用的探针…\n'
-docker compose "${compose_args[@]}" up -d --no-build
+python3 "$ROOT_DIR/scripts/migrate-compose.py" --root "$ROOT_DIR"
+docker compose "${compose_args[@]}" up -d --no-build --remove-orphans
 mode="$(python3 "$ROOT_DIR/scripts/configure-install.py" --root "$ROOT_DIR" --read APP_MODE)"
-verify_args=(--project-name yunlan --mode "$mode")
+verify_args=(--project-name yunlan --mode "$mode" --compose-file "$runtime_compose")
 if [[ "$probe_enabled" == true || "$probe_enabled" == 1 ]]; then verify_args+=(--probe); fi
 deployment_stage='服务健康和业务连接验证'
 printf '\n[5/5] 等待常驻容器健康，验证网页、登录入口与业务连接…\n'
 python3 "$ROOT_DIR/scripts/verify-deployment.py" "${verify_args[@]}"
+python3 "$ROOT_DIR/scripts/check-panel-compose.py" --root "$ROOT_DIR"
 docker compose "${compose_args[@]}" ps --all
 published_address="$(docker compose "${compose_args[@]}" port site-admin 18080)"
 printf '\n[部署成功] 全部必要服务与连接验证通过。\n'
@@ -117,6 +118,7 @@ esac
 if [[ "$mode" == demo ]]; then printf '[登录] 演示账号 root，密码 123456。\n'
 else printf '[登录] 使用现有 NewAPI 站长账号和密码，圈钱中心共用登录。\n'; fi
 printf '[配置] %s/.env；已有连接、机器密钥和持久数据保留。\n' "$ROOT_DIR"
+printf '[宝塔编排文件] %s\n' "$runtime_compose"
 printf '[IP 情报] 首次后台初始化，进度在 IP 分析页面查看。\n'
 if [[ "$probe_enabled" != true && "$probe_enabled" != 1 ]]; then
   printf '[探针] 当前未启用；配置上游与路由后可启用独立探针。\n'
