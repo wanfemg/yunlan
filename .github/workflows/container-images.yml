@@ -140,11 +140,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      YUNLAN_INSTALL_DIR: ${{ runner.temp }}/yunlan
       NEWAPI_UPSTREAM: http://127.0.0.1:18080
       LOGIN_PROBE_ENABLED: "true"
     steps:
       - uses: actions/checkout@v7
+      - name: Select an empty installation directory
+        run: printf 'YUNLAN_INSTALL_DIR=%s/yunlan\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Run the remote one-line installer
         run: bash <(curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_SHA/install.sh") --demo
       - name: Verify installed revision and published images
