@@ -22,7 +22,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ${YUNLAN_IMAGE:-yunlan:local}
+    image: ${YUNLAN_IMAGE:-ghcr.io/wanfemg/yunlan:latest}
     depends_on:
       initialize-data:
         condition: service_completed_successfully
@@ -79,14 +79,13 @@ services:
     build:
       context: .
       dockerfile: finance/Dockerfile
-    image: ${YUNLAN_FINANCE_IMAGE:-yunlan-finance:local}
+    image: ${YUNLAN_FINANCE_IMAGE:-ghcr.io/wanfemg/yunlan-finance:latest}
     restart: unless-stopped
     init: true
     network_mode: service:site-admin
     depends_on:
       site-admin:
         condition: service_healthy
-        restart: true
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
@@ -120,14 +119,13 @@ services:
     build:
       context: .
       dockerfile: login-probe/Dockerfile
-    image: ${YUNLAN_PROBE_IMAGE:-yunlan-probe:local}
+    image: ${YUNLAN_PROBE_IMAGE:-ghcr.io/wanfemg/yunlan-probe:latest}
     restart: unless-stopped
     init: true
     network_mode: service:site-admin
     depends_on:
       site-admin:
         condition: service_healthy
-        restart: true
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m

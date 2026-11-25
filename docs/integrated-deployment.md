@@ -71,14 +71,17 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanfemg/yunlan/main/install.
 已经检出源码时，在本目录执行 `bash deploy.sh`。
 安装器创建 `.env` 并为 `ADMIN_TOKEN`、`FINANCE_PROXY_SECRET`、
 `PROBE_SHARED_SECRET` 生成独立随机值，已有值保留。新装默认真实模式，演示需传入
-`--demo`；已有保存模式保持。默认发布地址为
-`127.0.0.1:18080`。密钥只保存在权限为 `600` 的 `.env`，没有额外财务登录口令。
+`--demo`；已有保存模式保持。新装默认发布地址为
+`0.0.0.0:18080`，通过服务器 IP 访问；同机反代可选 `127.0.0.1`，
+已有安装保留原绑定。默认拉取已发布镜像，`--build` 使用当前源码构建。
+密钥只保存在权限为 `600` 的 `.env`，没有额外财务登录口令。
+安装器在全部常驻容器健康、网页、登录入口及正式数据库检查通过后才报告成功。
 
 三项服务如下：
 
 | 服务 | 地址 | 持久数据 |
 | --- | --- | --- |
-| `site-admin` | 宿主机 `127.0.0.1:18080` | `site-admin-data` |
+| `site-admin` | 宿主机 `0.0.0.0:18080`，已有绑定保留 | `site-admin-data` |
 | `finance` | 共享网络空间内 `127.0.0.1:8765` | `finance-data` |
 | `login-probe` | 宿主机 `127.0.0.1:18081`，需启用 | `probe-data` |
 

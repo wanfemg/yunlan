@@ -4,7 +4,7 @@
 
 ## 安装入口
 
-在已有 Docker Engine、Docker Compose v2、Git、curl、Python 3 的 Linux 服务器执行：
+在已有 Docker Engine、Docker Compose v2、Git、curl、Python 3.8+ 的 Linux 服务器执行：
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/wanfemg/yunlan/main/install.sh)
@@ -12,7 +12,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanfemg/yunlan/main/install.
 
 安装入口下载源码并执行仓库中的 `deploy.sh`，不是只启动一个主后台二进制。
 后台／前端、圈钱中心和可选登录注册探针均有对应容器构建。
-首次安装从源码构建镜像；不依赖预先发布的 GHCR 镜像。
+默认拉取 GHCR 已发布的 `linux/amd64`／`linux/arm64` 镜像，与源码构建分开。
+当前源码需要自行构建时传入 `--build`；镜像拉取失败会明确停止，不会悄悄运行旧镜像。
 交互式安装完成后进入分级管理菜单，可管理服务、连接配置及 IP 情报；`--non-interactive`
 部署不会停留在菜单中。菜单停止服务时保留全部数据卷。
 
@@ -25,7 +26,7 @@ cd /opt/yunlan && bash install.sh --menu
 菜单包含安装／更新、服务管理、连接配置、IP 情报和帮助；服务管理与 IP 情报有二级操作。
 这是服务器安装管理菜单，网页内仍按功能导航。
 
-构建过程会安装前端、Go、Python 运行依赖。首次启动会立即在后台初始化核心 IP 情报：
+源码构建模式会安装前端、Go、Python 运行依赖。首次启动会立即在后台初始化核心 IP 情报：
 GeoLite City/ASN、VPN 与数据中心 IPv4/IPv6 网段、Tor 出口名单；文件校验后存入
 `data/ip-intelligence` 持久目录。安装服务不会等待这些外部数据源下载完成，进度和失败原因
 在「IP 分析 → IP 识别数据源」查看，支持手动重试。ISP 与 Anonymous-IP 的 MMDB 是可选独立
@@ -48,11 +49,18 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanfemg/yunlan/main/install.
 
 首次默认使用真实模式。脚本只读检查本机运行的 NewAPI 容器：
 
-1. 只有一个匹配容器时自动选择；多个时由终端选择。
+1. 按容器名、Compose 服务标签、镜像名顺序选择匹配的 NewAPI，支持明确指定容器。
 2. 从容器环境读取 `SQL_DSN`／`LOG_SQL_DSN`，识别 PostgreSQL／MySQL 主库及独立日志库。
 3. 检查本机运行容器的 Docker 网络与已发布端口；地址能唯一映射到数据库容器时，改写成可达端点并把 Yunlan 加入对应网络。
 4. 生成本项目的 `.env` 和 `.yunlan.compose.yaml`，不修改 NewAPI 容器或配置。
-5. 校验 Compose，构建镜像并启动服务。
+5. 校验 Compose，拉取镜像并启动服务，再核对全部必要容器的健康状态。
+6. 验证首页 HTML、登录入口与正式模式的主库、日志库、管理库连接，全部通过才报成功。
+
+无需 Compose 的 `--wait`／`--wait-timeout` 参数；服务就绪由安装器独立验证。
+没有交互终端时，完整连接信息采用默认监听地址与端口；必需连接缺失仍会明确报错。
+部署失败会输出失败阶段、包括已退出容器的状态与隐藏凭据后的最近日志。
+`initialize-data` 是一次性数据目录初始化容器，正常退出是预期行为；
+`site-admin`、`finance` 和已启用的 `login-probe` 必须持续运行且健康。
 
 自动发现适用于本机 Docker 中可明确识别的 PostgreSQL／MySQL 端点。已有 `.env` 或系统连接配置优先保留；外部数据库、无法唯一映射的容器、不可达的 loopback 地址须提供 Yunlan 容器可访问的 DSN，密码在交互提示中不回显。SQLite、ClickHouse 不在自动接入支持范围内。
 
@@ -74,6 +82,7 @@ bash deploy.sh --non-interactive
 | --- | --- |
 | `--live` | 明确采用真实数据模式 |
 | `--demo` | 明确采用演示模式 |
+| `--build` | 使用当前源码构建；默认拉取已发布镜像 |
 | `--non-interactive` | 不提问，缺少所需配置时退出 |
 | `--newapi-container NAME` | 选择本机 NewAPI 容器 |
 | `YUNLAN_INSTALL_DIR` | 安装目录 |
@@ -85,18 +94,20 @@ bash deploy.sh --non-interactive
 | `BIND_ADDRESS`／`HOST_PORT` | 宿主机监听地址／端口 |
 | `SITEADMIN_COOKIE_SECURE` | `auto`／`true`／`false`；正式 HTTPS 反代使用 `true` |
 
-`NEWAPI_UPSTREAM` 可使用实际站点域名。首次交互会显示识别结果供确认，
-以便已有验证码、HTTPS 和登录配置继续按原实例工作。
+`NEWAPI_UPSTREAM` 可使用实际站点域名，也支持自动识别的 Docker 内网地址。
+安装器验证该地址的登录设置可读取，以便验证码和二次验证沿用原实例配置。
 
 ## 访问与登录
 
-默认绑定 `127.0.0.1:18080`，同机反向代理的目标地址为：
+新装默认绑定 `0.0.0.0:18080`，通过服务器 IP 和端口 `18080` 访问。
+同机反向代理的目标地址为：
 
 ```text
 http://127.0.0.1:18080
 ```
 
-直接通过公网端口访问时，在首次交互中选择 `0.0.0.0`，或在本项目 `.env` 设置
+首次交互可选择直接访问、仅本机反代或自定义监听地址。已有安装保留原地址；
+原地址为 `127.0.0.1` 且需要直接访问时，在本项目 `.env` 设置
 `BIND_ADDRESS=0.0.0.0` 后再次运行 `bash deploy.sh`。
 正式网页登录使用现有 NewAPI 站长账号密码，保留源站的验证码和二次验证。
 圈钱中心共用站长登录，不另设财务口令。
@@ -142,4 +153,5 @@ docker compose --project-name yunlan --profile probe down
 模型调用仍转发原 NewAPI。运行状态与真实来源、AI、钉钉投递是否接通分开核对，
 具体见 [集成运行与部署](integrated-deployment.md)。
 
-发布时只进行构建、脚本语法及安装配置检查，不代表已经在实际生产服务器部署。
+发布前在 Linux Docker 中启动全部服务，验证网页登录、首页和财务代理，
+并用 Compose 2.16 重建容器核对兼容性。这些验证不代表已经在目标服务器部署。

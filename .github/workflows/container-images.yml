@@ -22,13 +22,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check shell entry points
-        run: bash -n install.sh deploy.sh
+        run: bash -n install.sh deploy.sh scripts/manage-install.sh
       - name: Check finance JavaScript
         run: node --check finance/web/app.js
       - name: Check finance Python syntax
         run: python3 -m compileall -q finance
       - name: Check installer Python syntax
-        run: python3 -m py_compile scripts/configure-install.py
+        run: python3 -m compileall -q scripts
+      - name: Check deployment failure and readiness paths
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
       - name: Validate complete Compose schema
         env:
           APP_MODE: demo
@@ -37,9 +39,43 @@ jobs:
           PROBE_SHARED_SECRET: yunlan-ci-probe-placeholder-not-production
         run: docker compose --profile probe config --quiet
 
+  deployment-smoke:
+    name: Run deployed containers and owner workflow
+    needs: source-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BIND_ADDRESS: "127.0.0.1"
+      NEWAPI_UPSTREAM: http://127.0.0.1:18080
+      LOGIN_PROBE_ENABLED: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and deploy all services
+        run: bash deploy.sh --demo --build --non-interactive
+      - name: Verify published ports and owner workflow
+        run: python3 scripts/smoke-deployment.py --probe-url http://127.0.0.1:18081
+      - name: Install older Compose without wait-timeout
+        run: |
+          mkdir -p "$HOME/.docker/cli-plugins"
+          curl -fL --retry 2 https://github.com/docker/compose/releases/download/v2.16.0/docker-compose-linux-x86_64 -o "$HOME/.docker/cli-plugins/docker-compose"
+          chmod +x "$HOME/.docker/cli-plugins/docker-compose"
+          docker compose version
+      - name: Recreate services with older Compose
+        run: |
+          docker compose --profile probe config --quiet
+          docker compose --profile probe up -d --no-build --force-recreate
+          python3 scripts/verify-deployment.py --mode demo --probe
+          python3 scripts/smoke-deployment.py --probe-url http://127.0.0.1:18081
+      - name: Show deployment diagnostics on failure
+        if: failure()
+        run: python3 scripts/deploy-diagnostics.py --root "$PWD" --stage CI --exit-code 1 -- --project-name yunlan --profile probe
+      - name: Stop test services
+        if: always()
+        run: docker compose --profile probe down
+
   images:
     name: Build ${{ matrix.component }}
-    needs: source-check
+    needs: [source-check, deployment-smoke]
     runs-on: ubuntu-latest
     permissions:
       contents: read

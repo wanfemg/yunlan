@@ -148,7 +148,7 @@ def parse_database_endpoint(dsn: str, driver: str) -> DatabaseEndpoint | None:
 def replace_database_endpoint(dsn: str, endpoint: DatabaseEndpoint, host: str, port: int) -> str:
     """Replace only the endpoint, retaining credentials and DSN parameters."""
     if not 1 <= port <= 65535:
-        raise DiscoveryError("Cannot safely rewrite an invalid database port.")
+        raise DiscoveryError("数据库端口无效，无法安全更新连接地址。")
     if endpoint.driver == "postgres" and dsn.startswith(("postgres://", "postgresql://")):
         parsed = urlsplit(dsn)
         userinfo, separator, _old = parsed.netloc.rpartition("@")
@@ -162,27 +162,27 @@ def replace_database_endpoint(dsn: str, endpoint: DatabaseEndpoint, host: str, p
     if endpoint.driver == "mysql":
         pattern = r"(@tcp\()([^)]*)(\))"
         if len(list(re.finditer(pattern, dsn))) != 1:
-            raise DiscoveryError("Cannot safely rewrite the MySQL TCP endpoint.")
+            raise DiscoveryError("MySQL TCP 连接地址不唯一，无法安全更新。")
         return re.sub(pattern, lambda m: m.group(1) + _authority(host, port) + m.group(3), dsn, count=1)
     fields = _pg_conninfo_fields(dsn)
     if fields is None:
-        raise DiscoveryError("Cannot safely rewrite the PostgreSQL host parameter.")
+        raise DiscoveryError("无法安全更新 PostgreSQL 主机地址。")
     hosts = [field for field in fields if field["key"] == "host"]
     ports = [field for field in fields if field["key"] == "port"]
     if len(hosts) != 1 or len(ports) > 1 or any(field["key"] == "hostaddr" for field in fields):
-        raise DiscoveryError("Cannot safely rewrite ambiguous PostgreSQL host parameters.")
+        raise DiscoveryError("PostgreSQL 主机或端口配置存在歧义，无法安全更新。")
     if not 1 <= port <= 65535:
-        raise DiscoveryError("Cannot safely rewrite an invalid database port.")
+        raise DiscoveryError("数据库端口无效，无法安全更新连接地址。")
     host_field = hosts[0]
     edits = [(int(host_field["start"]), int(host_field["end"]), host)]
     if ports:
         port_field = ports[0]
         edits.append((int(port_field["start"]), int(port_field["end"]), str(port)))
-    else:
-        return dsn.rstrip() + " port=" + str(port)
     rewritten = dsn
     for start, end, value in sorted(edits, reverse=True):
         rewritten = rewritten[:start] + value + rewritten[end:]
+    if not ports:
+        rewritten = rewritten.rstrip() + " port=" + str(port)
     return rewritten
 
 
@@ -309,11 +309,11 @@ def resolve_database_dsn(
     """Return usable DSN, required networks, and a non-secret status message."""
     endpoint = parse_database_endpoint(dsn, driver)
     if endpoint is None:
-        return dsn, [], "The supported database DSN has no unambiguous TCP host; enter an endpoint reachable from yunlan."
+        return dsn, [], "无法从数据库连接中唯一识别主机和端口，请填写站长后台能够访问的数据库地址。"
     host = endpoint.host.strip("[]").lower()
     if host in LOOPBACKS:
         if not newapi_host_mode:
-            return dsn, [], "The NewAPI database endpoint is loopback; enter an address reachable from yunlan."
+            return dsn, [], "NewAPI 数据库地址指向本机回环地址，站长后台容器无法直接访问；请填写容器可访问的数据库地址。"
         matches = []
         for container in containers:
             matches.extend((container, network, details, internal_port)
@@ -322,21 +322,21 @@ def resolve_database_dsn(
         # one matching container or internal TCP port must use manual input.
         unique = {(str(item[0].get("Id") or item[0].get("Name", "")), item[3]) for item in matches}
         if len(unique) != 1:
-            return dsn, [], "No unambiguous database container matches the published loopback port; enter a reachable DSN manually."
+            return dsn, [], "无法根据已发布端口唯一定位数据库容器，请填写站长后台可访问的数据库连接地址。"
         container, network, details, internal_port = sorted(matches, key=lambda item: (item[1] == "bridge", item[1]))[0]
         address = _unique_network_alias(container, network, containers)
         address = address or str(details.get("IPAddress", "")).strip()
         if not address:
-            return dsn, [], "The matched database container has no usable Docker network address; enter a reachable DSN manually."
+            return dsn, [], "已找到数据库容器，但没有可用的 Docker 网络地址；请填写站长后台可访问的数据库地址。"
         try:
             return replace_database_endpoint(dsn, endpoint, address, internal_port), [network], None
         except DiscoveryError:
-            return dsn, [], "The database DSN cannot be rewritten without changing its parameters; enter a reachable DSN manually."
+            return dsn, [], "数据库连接地址无法在保留原参数的情况下自动转换，请填写站长后台可访问的地址。"
 
     matches = [(container, _matching_networks(container, endpoint)) for container in containers]
     matches = [(container, networks) for container, networks in matches if networks]
     if len(matches) > 1:
-        return dsn, [], "The database hostname matches multiple Docker containers; enter an unambiguous DSN manually."
+        return dsn, [], "数据库主机名对应多个 Docker 容器，无法确定目标；请填写唯一可访问的数据库地址。"
     if not matches:
         # Do not treat an endpoint that resolves to a local container on a
         # built-in/non-attachable network as reachable from Compose's private
@@ -353,7 +353,7 @@ def resolve_database_dsn(
             }
             if host == container_name or host in aliases:
                 if any(name in BUILTIN_NETWORKS for name in networks):
-                    return dsn, [], "The database is on a non-attachable Docker network; enter a host-published DSN reachable from yunlan."
+                    return dsn, [], "数据库所在 Docker 网络无法接入站长后台；请填写服务器发布端口或其他可访问地址。"
         return dsn, [], None
     _container, networks = matches[0]
     # The endpoint name/IP was confirmed on these exact user-defined networks;
@@ -388,7 +388,7 @@ def inspect_running_containers() -> list[dict]:
         text=True, encoding="utf-8", errors="replace", timeout=25, check=False,
     )
     if listed.returncode:
-        raise DiscoveryError("Cannot inspect running Docker containers.")
+        raise DiscoveryError("无法读取正在运行的 Docker 容器。")
     identifiers = listed.stdout.split()
     if not identifiers:
         return []
@@ -397,11 +397,11 @@ def inspect_running_containers() -> list[dict]:
         text=True, encoding="utf-8", errors="replace", timeout=25, check=False,
     )
     if inspected.returncode:
-        raise DiscoveryError("Docker container inspection failed.")
+        raise DiscoveryError("Docker 容器信息读取失败。")
     try:
         result = json.loads(inspected.stdout)
     except ValueError:
-        raise DiscoveryError("Docker returned invalid container inspection data.") from None
+        raise DiscoveryError("Docker 返回的容器检查数据无效。") from None
     if not isinstance(result, list) or any(not isinstance(item, dict) for item in result):
-        raise DiscoveryError("Docker returned an invalid container inspection result.")
+        raise DiscoveryError("Docker 返回的容器检查结果格式无效。")
     return [item for item in result if item.get("State", {}).get("Running")]

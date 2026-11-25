@@ -111,7 +111,19 @@ build_compose_args() {
   if [[ "$probe_enabled" == true || "$probe_enabled" == 1 ]]; then
     COMPOSE_ARGS+=(--profile probe)
   fi
+  VERIFY_ARGS=(--project-name yunlan --mode "$(python3 "$ROOT_DIR/scripts/configure-install.py" --root "$ROOT_DIR" --read APP_MODE)")
+  if [[ "$probe_enabled" == true || "$probe_enabled" == 1 ]]; then VERIFY_ARGS+=(--probe); fi
   clear_compose_environment
+}
+
+start_services() {
+  "${COMPOSE_ARGS[@]}" up -d --no-build &&
+    python3 "$ROOT_DIR/scripts/verify-deployment.py" "${VERIFY_ARGS[@]}"
+}
+
+restart_services() {
+  "${COMPOSE_ARGS[@]}" restart &&
+    python3 "$ROOT_DIR/scripts/verify-deployment.py" "${VERIFY_ARGS[@]}"
 }
 
 service_menu() {
@@ -124,9 +136,9 @@ service_menu() {
     printf '1) 启动服务\n2) 停止服务（保留数据）\n3) 重启服务\n4) 查看服务状态\n5) 查看实时日志\n0) 返回上级菜单\n'
     IFS= read -r -p '请选择：' choice || return
     case "$choice" in
-      1) run_command '启动 yunlan 服务' "${COMPOSE_ARGS[@]}" up -d --wait --wait-timeout 180 ;;
+      1) run_command '启动并验证 yunlan 服务' start_services ;;
       2) run_command '停止 yunlan 服务并保留数据卷' "${COMPOSE_ARGS[@]}" stop ;;
-      3) run_command '重启 yunlan 服务' "${COMPOSE_ARGS[@]}" restart ;;
+      3) run_command '重启并验证 yunlan 服务' restart_services ;;
       4) run_command '查看 yunlan 服务状态' "${COMPOSE_ARGS[@]}" ps ;;
       5)
         printf '\n实时日志（按 Ctrl+C 返回本菜单）\n'
