@@ -155,6 +155,12 @@ def prepare(root, probe=False):
     except ValueError:
         raise PreparationError("Compose 返回了无效的编排内容。") from None
     validate_document(document, overlay)
+    document["services"].pop("initialize-data")
+    dependencies = document["services"]["site-admin"].get("depends_on")
+    if isinstance(dependencies, dict):
+        dependencies.pop("initialize-data", None)
+        if not dependencies:
+            document["services"]["site-admin"].pop("depends_on")
     document["services"]["site-admin"]["ports"] = ports
     if probe:
         document["services"]["login-probe"].pop("profiles", None)
@@ -165,6 +171,13 @@ def prepare(root, probe=False):
         for key in ("command", "entrypoint"):
             if service.get(key) is None:
                 service.pop(key, None)
+        dependencies = service.get("depends_on", {})
+        if isinstance(dependencies, dict):
+            for dependency in dependencies.values():
+                if isinstance(dependency, dict) and "required" in dependency:
+                    if dependency["required"] is not True:
+                        raise PreparationError("服务依赖包含不受旧版 Compose 支持的可选或无效设置。")
+                    dependency.pop("required")
     content = json.dumps(document, ensure_ascii=False, indent=2) + "\n"
     if len(content.encode("utf-8")) > MAX_MANIFEST_BYTES:
         raise PreparationError("生成的编排超过大小限制。")

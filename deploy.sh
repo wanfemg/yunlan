@@ -85,10 +85,12 @@ runtime_compose="$(python3 "$ROOT_DIR/scripts/prepare-compose.py" "${prepare_arg
 [[ "$runtime_compose" == "$ROOT_DIR/.yunlan.runtime.yaml" ]] || fail '生成的运行编排路径无效。'
 compose_args=(--project-name yunlan --project-directory "$ROOT_DIR" --env-file "$ROOT_DIR/.env" -f "$runtime_compose")
 docker compose "${compose_args[@]}" config --quiet
+initialization_args=(--project-name yunlan --project-directory "$ROOT_DIR" --env-file "$ROOT_DIR/.env" -f "$ROOT_DIR/compose.yaml")
+deployment_stage='初始化镜像拉取'
+docker compose "${initialization_args[@]}" pull initialize-data
 if [[ "$build_images" == true ]]; then
   deployment_stage='源码镜像构建'
   printf '\n[3/5] 从当前源码构建镜像，下面为 Docker 构建进度…\n'
-  docker compose "${compose_args[@]}" pull initialize-data
   docker compose "${compose_args[@]}" build
 else
   deployment_stage='已发布镜像拉取'
@@ -98,6 +100,7 @@ fi
 deployment_stage='容器创建和启动'
 printf '\n[4/5] 创建并启动后台、财务与已启用的探针…\n'
 python3 "$ROOT_DIR/scripts/migrate-compose.py" --root "$ROOT_DIR"
+docker compose "${initialization_args[@]}" run --rm --no-deps initialize-data
 docker compose "${compose_args[@]}" up -d --no-build --remove-orphans
 mode="$(python3 "$ROOT_DIR/scripts/configure-install.py" --root "$ROOT_DIR" --read APP_MODE)"
 verify_args=(--project-name yunlan --mode "$mode" --compose-file "$runtime_compose")

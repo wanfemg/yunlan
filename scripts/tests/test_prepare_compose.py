@@ -33,14 +33,19 @@ def rendered_compose():
                     "FINANCE_PROXY_SECRET": "${FINANCE_PROXY_SECRET:?Run install.sh}",
                 },
                 "networks": {"default": None, "yunlan_external_1": None},
+                "depends_on": {"initialize-data": {"condition": "service_completed_successfully"}},
             },
-            "finance": {"network_mode": "service:site-admin"},
+            "finance": {
+                "network_mode": "service:site-admin",
+                "depends_on": {"site-admin": {"condition": "service_healthy"}},
+            },
             "login-probe": {"profiles": ["probe"], "network_mode": "service:site-admin"},
         },
         "networks": {
             "default": {"name": "yunlan_default"},
             "yunlan_external_1": {"external": True, "name": "newapi_default"},
         },
+        "volumes": {"site-admin-data": {}, "finance-data": {}, "probe-data": {}},
     }
 
 
@@ -92,6 +97,8 @@ class PrepareComposeTests(unittest.TestCase):
         self.assertEqual(output, str(self.target) + "\n")
         self.assertEqual(errors, "")
         expected = rendered_compose()
+        expected["services"].pop("initialize-data")
+        expected["services"]["site-admin"].pop("depends_on")
         expected["services"]["login-probe"].pop("profiles")
         expected["services"]["site-admin"]["ports"] = [
             {"target": 18080, "published": "18080", "host_ip": "127.0.0.1", "protocol": "tcp"},
@@ -119,7 +126,7 @@ class PrepareComposeTests(unittest.TestCase):
         code, _output, errors, _run = self.invoke(probe=False)
         self.assertEqual(code, 0, errors)
         document = json.loads(self.target.read_text(encoding="utf-8"))
-        self.assertEqual(set(document["services"]), {"initialize-data", "site-admin", "finance"})
+        self.assertEqual(set(document["services"]), {"site-admin", "finance"})
 
     def test_runtime_ports_use_configured_typed_settings_without_expanding_secrets(self):
         self.environment.write_text(
@@ -162,9 +169,32 @@ class PrepareComposeTests(unittest.TestCase):
         self.assertEqual(code, 0, errors)
         document = json.loads(self.target.read_text(encoding="utf-8"))
         self.assertEqual(set(document["services"]), {
-            "initialize-data", "site-admin", "finance", "login-probe",
+            "site-admin", "finance", "login-probe",
         })
         self.assertNotIn("profiles", document["services"]["login-probe"])
+
+    def test_runtime_removes_only_initialize_dependency_and_preserves_other_dependencies_and_volumes(self):
+        document = rendered_compose()
+        document["services"]["site-admin"]["depends_on"]["extra-service"] = {
+            "condition": "service_started",
+        }
+        code, _output, errors, _run = self.invoke(document=document, probe=True)
+        self.assertEqual(code, 0, errors)
+        saved = json.loads(self.target.read_text(encoding="utf-8"))
+        self.assertNotIn("initialize-data", saved["services"])
+        self.assertEqual(saved["services"]["site-admin"]["depends_on"], {
+            "extra-service": {"condition": "service_started"},
+        })
+        self.assertEqual(saved["services"]["finance"]["depends_on"], {
+            "site-admin": {"condition": "service_healthy"},
+        })
+        self.assertEqual(saved["volumes"], document["volumes"])
+
+    def test_runtime_omits_empty_siteadmin_dependencies_after_initialize_removal(self):
+        code, _output, errors, _run = self.invoke()
+        self.assertEqual(code, 0, errors)
+        saved = json.loads(self.target.read_text(encoding="utf-8"))
+        self.assertNotIn("depends_on", saved["services"]["site-admin"])
 
     def test_null_command_and_entrypoint_are_removed_without_changing_other_nulls(self):
         document = rendered_compose()
@@ -179,6 +209,28 @@ class PrepareComposeTests(unittest.TestCase):
         self.assertEqual(saved["services"]["site-admin"]["command"], [])
         self.assertEqual(saved["services"]["site-admin"]["entrypoint"], "")
         self.assertIsNone(saved["services"]["site-admin"]["environment"]["UNSET_VALUE"])
+
+    def test_default_required_dependency_is_omitted_for_older_compose(self):
+        document = rendered_compose()
+        document["services"]["finance"]["depends_on"]["site-admin"]["required"] = True
+        code, _output, errors, _run = self.invoke(document=document)
+        self.assertEqual(code, 0, errors)
+        saved = json.loads(self.target.read_text(encoding="utf-8"))
+        self.assertEqual(saved["services"]["finance"]["depends_on"], {
+            "site-admin": {"condition": "service_healthy"},
+        })
+
+    def test_unsupported_optional_or_invalid_dependency_keeps_existing_manifest(self):
+        self.target.write_text("old manifest\n", encoding="utf-8")
+        for required in (False, None, "private-invalid-required", 1):
+            with self.subTest(required=required):
+                document = rendered_compose()
+                document["services"]["finance"]["depends_on"]["site-admin"]["required"] = required
+                code, output, errors, _run = self.invoke(document=document)
+                self.assertEqual(code, 1)
+                self.assertEqual(output, "")
+                self.assertNotIn("private", errors)
+                self.assertEqual(self.target.read_text(encoding="utf-8"), "old manifest\n")
 
     def test_no_overlay_and_deterministic_rerun(self):
         first, *_ = self.invoke()

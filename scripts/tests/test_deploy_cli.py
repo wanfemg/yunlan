@@ -41,6 +41,7 @@ if [[ "$*" == "compose up --help" ]]; then
 fi
 case " $* " in
   *" pull "*) exit "${FAKE_PULL_FAIL:-0}" ;;
+  *" run "*) exit "${FAKE_INIT_FAIL:-0}" ;;
   *" up "*) exit "${FAKE_UP_FAIL:-0}" ;;
   *" port site-admin 18080 "*) printf '127.0.0.1:18080\\n' ;;
 esac
@@ -107,7 +108,7 @@ esac
         result, calls = self.deploy("--build")
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn(" build", calls)
-        self.assertNotIn(" pull\n", calls)
+        self.assertNotIn(".yunlan.runtime.yaml pull\n", calls)
 
     def test_failed_image_pull_does_not_start_or_report_success(self):
         result, calls = self.deploy(FAKE_PULL_FAIL="17")
@@ -144,9 +145,16 @@ esac
             arguments = shlex.split(line)
             self.assertEqual(arguments.count("-f"), 1, line)
             compose_file = arguments[arguments.index("-f") + 1]
-            self.assertTrue(compose_file.endswith("/.yunlan.runtime.yaml"), line)
+            if "initialize-data" in arguments:
+                self.assertTrue(compose_file.endswith("/compose.yaml"), line)
+                if "run" in arguments:
+                    self.assertIn("--rm", arguments, line)
+                    self.assertIn("--no-deps", arguments, line)
+            else:
+                self.assertTrue(compose_file.endswith("/.yunlan.runtime.yaml"), line)
             self.assertNotIn(",", compose_file)
         self.assertLess(calls.index("/migrate-compose.py"), calls.index(" up -d"))
+        self.assertLess(calls.index(" run --rm --no-deps initialize-data"), calls.index(" up -d"))
 
     def test_failed_manifest_preparation_never_creates_containers(self):
         result, calls = self.deploy(FAKE_PREPARE_FAIL="20")
@@ -166,6 +174,14 @@ esac
         result, calls = self.deploy(FAKE_PANEL_FAIL="22")
         self.assertEqual(result.returncode, 22, result.stdout)
         self.assertIn("/check-panel-compose.py", calls)
+        self.assertIn("/deploy-diagnostics.py", calls)
+        self.assertNotIn("[部署成功]", result.stdout)
+
+    def test_failed_oneoff_initialization_never_starts_services(self):
+        result, calls = self.deploy(FAKE_INIT_FAIL="23")
+        self.assertEqual(result.returncode, 23, result.stdout)
+        self.assertIn("run --rm --no-deps initialize-data", calls)
+        self.assertNotIn(" up ", calls)
         self.assertIn("/deploy-diagnostics.py", calls)
         self.assertNotIn("[部署成功]", result.stdout)
 

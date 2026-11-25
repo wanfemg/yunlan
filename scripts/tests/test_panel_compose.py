@@ -18,7 +18,7 @@ SPEC.loader.exec_module(panel)
 class FakeCompose:
     def __init__(self, root):
         self.calls = []
-        self.projects = [{"Name": "yunlan", "Status": "running(2)", "ConfigFiles": str(root / ".yunlan.runtime.yaml")}]
+        self.projects = [{"Name": "yunlan", "Status": "running(3)", "ConfigFiles": str(root / ".yunlan.runtime.yaml")}]
         self.services = [{"ID": "a" * 64, "Service": "site-admin"}, {"ID": "b" * 64, "Service": "finance"}]
         self.logs = "site-admin | listening\nfinance | started\n"
         self.ps_format = "list"
@@ -107,6 +107,25 @@ class PanelComposeTests(unittest.TestCase):
         docker.projects.append(dict(docker.projects[0]))
         with self.assertRaises(panel.PanelComposeError):
             self.check(docker)
+
+    def test_exited_initializer_cannot_report_panel_ready(self):
+        docker = FakeCompose(self.root)
+        docker.projects[0]["Status"] = "exited(1), running(3)"
+        with self.assertRaisesRegex(panel.PanelComposeError, "状态"):
+            self.check(docker)
+        self.assertEqual(len(docker.calls), 1)
+
+    def test_missing_or_invalid_project_status_cannot_report_panel_ready(self):
+        for value in (None, "", 3, "exited(3)", "restarting(1), running(2)"):
+            with self.subTest(value=value):
+                docker = FakeCompose(self.root)
+                if value is None:
+                    docker.projects[0].pop("Status")
+                else:
+                    docker.projects[0]["Status"] = value
+                with self.assertRaisesRegex(panel.PanelComposeError, "状态"):
+                    self.check(docker)
+                self.assertEqual(len(docker.calls), 1)
 
     def test_empty_container_list_fails(self):
         docker = FakeCompose(self.root)

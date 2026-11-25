@@ -111,12 +111,14 @@ build_compose_args() {
   runtime_compose="$(python3 "$ROOT_DIR/scripts/prepare-compose.py" "${prepare_args[@]}")" || return 1
   [[ "$runtime_compose" == "$ROOT_DIR/.yunlan.runtime.yaml" ]] || return 1
   COMPOSE_ARGS=(docker compose --project-name yunlan --project-directory "$ROOT_DIR" --env-file "$ROOT_DIR/.env" -f "$runtime_compose")
+  INITIALIZATION_ARGS=(docker compose --project-name yunlan --project-directory "$ROOT_DIR" --env-file "$ROOT_DIR/.env" -f "$ROOT_DIR/compose.yaml")
   VERIFY_ARGS=(--project-name yunlan --mode "$(python3 "$ROOT_DIR/scripts/configure-install.py" --root "$ROOT_DIR" --read APP_MODE)" --compose-file "$runtime_compose")
   if [[ "$probe_enabled" == true || "$probe_enabled" == 1 ]]; then VERIFY_ARGS+=(--probe); fi
 }
 
 start_services() {
   python3 "$ROOT_DIR/scripts/migrate-compose.py" --root "$ROOT_DIR" &&
+    "${INITIALIZATION_ARGS[@]}" run --rm --no-deps initialize-data &&
     "${COMPOSE_ARGS[@]}" up -d --no-build --remove-orphans &&
     python3 "$ROOT_DIR/scripts/verify-deployment.py" "${VERIFY_ARGS[@]}" &&
     python3 "$ROOT_DIR/scripts/check-panel-compose.py" --root "$ROOT_DIR"
@@ -124,6 +126,7 @@ start_services() {
 
 restart_services() {
   python3 "$ROOT_DIR/scripts/migrate-compose.py" --root "$ROOT_DIR" &&
+    "${INITIALIZATION_ARGS[@]}" run --rm --no-deps initialize-data &&
     "${COMPOSE_ARGS[@]}" up -d --no-build --remove-orphans &&
     "${COMPOSE_ARGS[@]}" restart &&
     python3 "$ROOT_DIR/scripts/verify-deployment.py" "${VERIFY_ARGS[@]}" &&

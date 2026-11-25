@@ -60,6 +60,9 @@ def check_panel_compose(root, *, report=print):
     matched = [item for item in projects if item.get("Name") == "yunlan"]
     if len(matched) != 1:
         raise PanelComposeError("编排列表中没有唯一的 yunlan 项目。")
+    status = matched[0].get("Status")
+    if not isinstance(status, str) or status.split("(", 1)[0].lower() != "running":
+        raise PanelComposeError("编排状态未以 running 开头；宝塔会将项目显示为停止或异常。")
     config_files = matched[0].get("ConfigFiles")
     if config_files != str(runtime):
         raise PanelComposeError("yunlan 项目未记录预期的单一编排文件；面板仍会查找错误路径。")

@@ -59,7 +59,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanfemg/yunlan/main/install.
 无需 Compose 的 `--wait`／`--wait-timeout` 参数；服务就绪由安装器独立验证。
 没有交互终端时，完整连接信息采用默认监听地址与端口；必需连接缺失仍会明确报错。
 部署失败会输出失败阶段、包括已退出容器的状态与隐藏凭据后的最近日志。
-`initialize-data` 是一次性数据目录初始化容器，正常退出是预期行为；
+`initialize-data` 通过一次性任务准备数据目录，成功后自动移除，不留在常驻编排中；
 `site-admin`、`finance` 和已启用的 `login-probe` 必须持续运行且健康。
 
 自动发现适用于本机 Docker 中可明确识别的 PostgreSQL／MySQL 端点。已有 `.env` 或系统连接配置优先保留；外部数据库、无法唯一映射的容器、不可达的 loopback 地址须提供 Yunlan 容器可访问的 DSN，密码在交互提示中不回显。SQLite、ClickHouse 不在自动接入支持范围内。
@@ -140,7 +140,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanfemg/yunlan/main/install.
 报“文件不存在”，因而无法读取容器列表、日志及运行状态。安装器会将旧 Yunlan 容器
 迁移到单文件标签，短暂重启本项目并保留 `.env`、后台配置、数据卷和外部网络。
 迁移后刷新宝塔编排列表并重新打开详情。单凭旧面板的“已停止／暂无容器”不能判断 Docker 实际状态。
-`initialize-data` 正常退出仍是预期行为。
+部分宝塔版本会将“正常退出的初始化容器 + 正在运行的服务”显示成已停止；
+安装器会自动清理旧初始化容器，后续初始化任务执行完即移除。
 
 更新时重新执行同一条安装命令。引导脚本核对仓库、分支和工作树，
 仅作快进更新；有源码改动或提交分叉时退出，保留本地内容。
