@@ -53,7 +53,7 @@ class PrepareComposeTests(unittest.TestCase):
         self.source = self.root / "compose.yaml"
         self.overlay = self.root / ".yunlan.compose.yaml"
         self.target = self.root / ".yunlan.runtime.yaml"
-        self.environment.write_text("fixture-private-value\n", encoding="utf-8")
+        self.environment.write_text("ADMIN_TOKEN=fixture-private-value\n", encoding="utf-8")
         self.source.write_text("services: {}\n", encoding="utf-8")
 
     def invoke(self, document=None, result=None, exception=None, probe=False):
@@ -93,6 +93,10 @@ class PrepareComposeTests(unittest.TestCase):
         self.assertEqual(errors, "")
         expected = rendered_compose()
         expected["services"]["login-probe"].pop("profiles")
+        expected["services"]["site-admin"]["ports"] = [
+            {"target": 18080, "published": "18080", "host_ip": "127.0.0.1", "protocol": "tcp"},
+            {"target": 18081, "published": "18081", "host_ip": "127.0.0.1", "protocol": "tcp"},
+        ]
         self.assertEqual(
             self.target.read_text(encoding="utf-8"),
             json.dumps(expected, ensure_ascii=False, indent=2) + "\n",
@@ -116,6 +120,42 @@ class PrepareComposeTests(unittest.TestCase):
         self.assertEqual(code, 0, errors)
         document = json.loads(self.target.read_text(encoding="utf-8"))
         self.assertEqual(set(document["services"]), {"initialize-data", "site-admin", "finance"})
+
+    def test_runtime_ports_use_configured_typed_settings_without_expanding_secrets(self):
+        self.environment.write_text(
+            "ADMIN_TOKEN=fixture-private-value\nBIND_ADDRESS=0.0.0.0\nHOST_PORT=28080\n"
+            "PROBE_BIND_ADDRESS=::1\nPROBE_HOST_PORT=28081\n",
+            encoding="utf-8",
+        )
+        code, output, errors, _run = self.invoke(probe=True)
+        self.assertEqual(code, 0, errors)
+        document = json.loads(self.target.read_text(encoding="utf-8"))
+        self.assertEqual(document["services"]["site-admin"]["ports"], [
+            {"target": 18080, "published": "28080", "host_ip": "0.0.0.0", "protocol": "tcp"},
+            {"target": 18081, "published": "28081", "host_ip": "::1", "protocol": "tcp"},
+        ])
+        self.assertIn("${MAIN_DB_DSN:-}", self.target.read_text(encoding="utf-8"))
+        self.assertNotIn("fixture-private-value", output + errors + self.target.read_text(encoding="utf-8"))
+
+    def test_runtime_ports_reject_invalid_addresses_and_port_boundaries(self):
+        self.target.write_text("old manifest\n", encoding="utf-8")
+        for key, value in (
+            ("BIND_ADDRESS", "private-invalid-address"),
+            ("HOST_PORT", "private-invalid-port"),
+            ("HOST_PORT", "0"),
+            ("HOST_PORT", "65536"),
+            ("PROBE_BIND_ADDRESS", "private-invalid-probe-address"),
+            ("PROBE_HOST_PORT", "-1"),
+            ("PROBE_HOST_PORT", "65536"),
+        ):
+            with self.subTest(key=key, value=value):
+                self.environment.write_text("ADMIN_TOKEN=fixture-private-value\n" + key + "=" + value + "\n",
+                                            encoding="utf-8")
+                code, output, errors, _run = self.invoke()
+                self.assertEqual(code, 1)
+                self.assertEqual(output, "")
+                self.assertNotIn("private", errors)
+                self.assertEqual(self.target.read_text(encoding="utf-8"), "old manifest\n")
 
     def test_enabled_probe_is_managed_without_a_profile_flag(self):
         code, _output, errors, _run = self.invoke(probe=True)

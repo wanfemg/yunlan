@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import ipaddress
 import json
 from pathlib import Path
 import stat
@@ -71,12 +72,38 @@ def validate_document(document, overlay):
             raise PreparationError("生成的编排未完整保留已有的外部网络。")
 
 
-def atomic_save(path, content):
+def configuration_helper():
     helper = Path(__file__).resolve().with_name("configure-install.py")
     specification = importlib.util.spec_from_file_location("yunlan_compose_config", helper)
     module = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(module)
-    module.atomic_write(path, content)
+    return module
+
+
+def atomic_save(path, content):
+    configuration_helper().atomic_write(path, content)
+
+
+def runtime_ports(environment):
+    _lines, values = configuration_helper().read_env(environment)
+    ports = []
+    for bind_key, port_key, target in (
+        ("BIND_ADDRESS", "HOST_PORT", 18080),
+        ("PROBE_BIND_ADDRESS", "PROBE_HOST_PORT", 18081),
+    ):
+        bind = values.get(bind_key) or "127.0.0.1"
+        published = values.get(port_key) or str(target)
+        try:
+            address = ipaddress.ip_address(bind)
+        except ValueError:
+            raise PreparationError(bind_key + " 必须是有效的 IP 地址。") from None
+        if not published.isascii() or not published.isdecimal() or not 1 <= int(published) <= 65535:
+            raise PreparationError(port_key + " 必须是 1 到 65535 之间的整数。")
+        ports.append({
+            "target": target, "published": str(int(published)),
+            "host_ip": str(address), "protocol": "tcp",
+        })
+    return ports
 
 
 def prepare(root, probe=False):
@@ -91,6 +118,7 @@ def prepare(root, probe=False):
     check_managed_file(source, MAX_MANIFEST_BYTES)
     has_overlay = check_managed_file(overlay_path, MAX_OVERLAY_BYTES, required=False)
     check_managed_file(target, MAX_MANIFEST_BYTES, required=False)
+    ports = runtime_ports(environment)
     overlay = {}
     if has_overlay:
         try:
@@ -127,6 +155,7 @@ def prepare(root, probe=False):
     except ValueError:
         raise PreparationError("Compose 返回了无效的编排内容。") from None
     validate_document(document, overlay)
+    document["services"]["site-admin"]["ports"] = ports
     if probe:
         document["services"]["login-probe"].pop("profiles", None)
     else:

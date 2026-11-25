@@ -36,14 +36,15 @@ services:
     cap_drop:
       - ALL
     stop_grace_period: 15s
+    # The installer applies .env host bindings to .yunlan.runtime.yaml.
     ports:
       - target: 18080
-        published: "${HOST_PORT:-18080}"
-        host_ip: "${BIND_ADDRESS:-127.0.0.1}"
+        published: "18080"
+        host_ip: 127.0.0.1
         protocol: tcp
       - target: 18081
-        published: "${PROBE_HOST_PORT:-18081}"
-        host_ip: "${PROBE_BIND_ADDRESS:-127.0.0.1}"
+        published: "18081"
+        host_ip: 127.0.0.1
         protocol: tcp
     environment:
       APP_MODE: ${APP_MODE:-demo}

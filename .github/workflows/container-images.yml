@@ -93,7 +93,10 @@ jobs:
         run: python3 scripts/deploy-diagnostics.py --root "$PWD" --stage CI --exit-code 1 -- --project-name yunlan -f "$PWD/.yunlan.runtime.yaml"
       - name: Stop test services
         if: always()
-        run: docker compose -f .yunlan.runtime.yaml down --remove-orphans
+        run: |
+          if [[ -f .yunlan.runtime.yaml ]]; then
+            docker compose -f .yunlan.runtime.yaml down --remove-orphans
+          fi
 
   images:
     name: Build ${{ matrix.component }}
