@@ -132,3 +132,36 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.component }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+
+  published-install:
+    name: Install published images from an empty directory
+    needs: images
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      YUNLAN_INSTALL_DIR: ${{ runner.temp }}/yunlan
+      NEWAPI_UPSTREAM: http://127.0.0.1:18080
+      LOGIN_PROBE_ENABLED: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run the remote one-line installer
+        run: bash <(curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_SHA/install.sh") --demo
+      - name: Verify installed revision and published images
+        run: |
+          test "$(git -C "$YUNLAN_INSTALL_DIR" rev-parse HEAD)" = "$GITHUB_SHA"
+          for service in site-admin finance login-probe; do
+            container="$(docker ps --filter label=com.docker.compose.project=yunlan --filter "label=com.docker.compose.service=$service" --format '{{.ID}}')"
+            revision="$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$container")"
+            test "$revision" = "$GITHUB_SHA"
+          done
+          python3 "$YUNLAN_INSTALL_DIR/scripts/smoke-deployment.py" --probe-url http://127.0.0.1:18081
+      - name: Show installation diagnostics on failure
+        if: failure()
+        run: python3 scripts/deploy-diagnostics.py --root "$YUNLAN_INSTALL_DIR" --stage published-install --exit-code 1 -- --project-name yunlan --project-directory "$YUNLAN_INSTALL_DIR" -f "$YUNLAN_INSTALL_DIR/compose.yaml" --profile probe
+      - name: Stop installed services
+        if: always()
+        run: |
+          if [[ -f "$YUNLAN_INSTALL_DIR/.env" ]]; then
+            docker compose --project-directory "$YUNLAN_INSTALL_DIR" --env-file "$YUNLAN_INSTALL_DIR/.env" -f "$YUNLAN_INSTALL_DIR/compose.yaml" --profile probe down
+          fi

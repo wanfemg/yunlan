@@ -154,4 +154,6 @@ docker compose --project-name yunlan --profile probe down
 具体见 [集成运行与部署](integrated-deployment.md)。
 
 发布前在 Linux Docker 中启动全部服务，验证网页登录、首页和财务代理，
-并用 Compose 2.16 重建容器核对兼容性。这些验证不代表已经在目标服务器部署。
+并用 Compose 2.16 重建容器核对兼容性。镜像发布后还会从空目录运行远程一键安装，
+核对下载源码与三个已运行镜像的提交一致，重测网页登录和财务代理。
+这些验证不代表已经在目标服务器部署。
